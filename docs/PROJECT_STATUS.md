@@ -49,3 +49,22 @@
 ## 临时暂存资料
 
 `docs/_to_remove/planning/` 保存旧设计稿和实现计划，仅供维护者确认后整体删除；当前进度以本文件、README 和实际代码为准。
+
+## 第二阶段执行中（2026-10-12）
+
+- 目标仓库由用户提供：iaochenacademic-lab/pcmsgasc.io；起点 main `24a9095c43e50ed9b3b4a34af319f81ac022dd22`，新本地分支 `codex/phase2-auth-attendance`。
+- 克隆后的工作树干净；原文所述两项回归测试已包含在远端 main，完整保留其断言。
+- 依赖：`npm ci --no-audit --no-fund` 成功，安装 457 个既有锁定包。
+- 修改前基线（串行）：`npm test` 共 39 项，37 通过，2 项失败（未知账号虚拟比较、并发锁定不应签发 Session）；`npm run typecheck` 失败 1 项，resetLoginFailures 的 Promise<void> 与夹具 Promise<boolean> 不一致。
+- 远端 Supabase 项目与仓库现有两项迁移一致，public.users 的元数据行数为 0。安全顾问基线仅有既有 public.rls_auto_enable 函数的 anon/authenticated 可执行 SECURITY DEFINER 两类警告；本次不修改该函数。
+- 当前尚未通过阶段 A 验收。新克隆没有本地服务端配置，已向用户询问既有配置文件所在路径，不读取或展示其内容。
+
+### 阶段 A 验收结果
+
+- 认证计时均衡、原子成功清锁、Session版本/停用检查、改密续期和同源校验已实现；旧回归断言保留。
+- 本地四项验收串行通过：89 tests / 10 files；typecheck 通过；lint 通过；Next.js 16.3.6 生产构建通过。
+- 已应用远端迁移 `20261012040521_auth_hardening`，本地迁移文件与远端版本一致；已重新生成数据库类型。
+- 已复核三个新 RPC 均 SECURITY INVOKER / search_path=''，anon/authenticated 不可执行，service_role 可执行；安全顾问无新增告警。
+- 决策：改密 RPC 增加预期 session_version 条件，阻止已撤销的在途改密；Proxy 只负责 Cookie 与登录路由，角色及强制改密以数据库守卫为准；改密请求显式挑选密码字段，客户端不能覆盖会话身份。
+- 决策：同源403按规格仅续期可解密Cookie，不查库、不授权、不执行业务；无法解密配置时500/no-store且不签发Cookie。
+- 用户已提供本地配置文件，已复制至 Git 忽略位置；仅确认目标主机为 epsxsbskwlewmsstrzfu.supabase.co 及必要配置存在，未读取或展示内容。

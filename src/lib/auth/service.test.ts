@@ -19,6 +19,8 @@ async function createMemoryRepository(overrides: Partial<UserRecord> = {}) {
     role: "teacher",
     name: "Teacher One",
     mustChangePassword: false,
+    sessionVersion: 1,
+    isActive: true,
     failedLoginCount: 0,
     lockedUntil: null,
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -51,22 +53,23 @@ async function createMemoryRepository(overrides: Partial<UserRecord> = {}) {
     },
     async resetLoginFailures(userId) {
       calls.resetLoginFailures(userId);
-      if (storedUser?.id !== userId) return false;
+      if (storedUser?.id !== userId || !storedUser.isActive) return false;
       if (storedUser.lockedUntil && Date.parse(storedUser.lockedUntil) > NOW.getTime()) return false;
       storedUser = { ...storedUser, ...resetLoginFailureState() };
       return true;
     },
-    async updatePassword(userId, passwordHash) {
+    async changePassword(userId, passwordHash, expectedSessionVersion) {
       calls.updatePassword(userId, passwordHash);
-      if (storedUser?.id !== userId) return false;
+      if (storedUser?.id !== userId || !storedUser.isActive || storedUser.sessionVersion !== expectedSessionVersion) return null;
       storedUser = {
         ...storedUser,
         passwordHash,
+        sessionVersion: storedUser.sessionVersion + 1,
         mustChangePassword: false,
         ...resetLoginFailureState(),
         updatedAt: NOW.toISOString(),
       };
-      return true;
+      return storedUser.sessionVersion;
     },
   };
 
@@ -75,6 +78,9 @@ async function createMemoryRepository(overrides: Partial<UserRecord> = {}) {
     calls,
     get user() {
       return storedUser;
+    },
+    revokeSessions() {
+      if (storedUser) storedUser = { ...storedUser, sessionVersion: storedUser.sessionVersion + 1 };
     },
     lockAccount() {
       if (storedUser) {
@@ -205,6 +211,7 @@ describe("authentication service", () => {
     const memory = await createMemoryRepository({ mustChangePassword: true });
     const input = {
       userId: memory.user!.id,
+      sessionVersion: memory.user!.sessionVersion,
       currentPassword: CURRENT_PASSWORD,
       newPassword: "a-new-strong-password",
     };
@@ -220,6 +227,7 @@ describe("authentication service", () => {
     const changed = await changeUserPassword(input, dependencies(memory.repository));
     expect(changed).toMatchObject({ ok: true, session: { mustChangePassword: false } });
     expect(memory.calls.updatePassword).toHaveBeenCalledTimes(1);
+    expect(changed).toMatchObject({ ok: true, session: { sessionVersion: 2 } });
     expect(memory.user?.mustChangePassword).toBe(false);
     expect(memory.user?.failedLoginCount).toBe(0);
     expect(await verifyPassword(input.newPassword, memory.user!.passwordHash)).toBe(true);
@@ -234,12 +242,80 @@ describe("authentication service", () => {
       changeUserPassword(
         {
           userId: memory.user!.id,
+          sessionVersion: memory.user!.sessionVersion,
           currentPassword: CURRENT_PASSWORD,
           newPassword: "short",
         },
         dependencies(memory.repository),
       ),
     ).resolves.toEqual({ ok: false, reason: "invalid_new_password" });
+    expect(memory.calls.updatePassword).not.toHaveBeenCalled();
+  });
+
+  it("performs the same dummy comparison for a deactivated account", async () => {
+    const memory = await createMemoryRepository({ isActive: false });
+    const compare = vi.fn(verifyPassword);
+
+    const result = await authenticateUser(
+      { username: "teacher-one", password: CURRENT_PASSWORD },
+      { ...dependencies(memory.repository), verifyPassword: compare },
+    );
+
+    expect(result).toEqual({ ok: false, reason: "invalid_credentials" });
+    expect(compare).toHaveBeenCalledTimes(1);
+    expect(compare.mock.calls[0]![1]).not.toBe(memory.user?.passwordHash);
+    const bcrypt = await import("bcryptjs");
+    expect(bcrypt.default.getRounds(compare.mock.calls[0]![1])).toBe(12);
+    expect(memory.calls.recordLoginFailure).not.toHaveBeenCalled();
+    expect(memory.calls.resetLoginFailures).not.toHaveBeenCalled();
+  });
+
+  it("includes the database session version when signing in", async () => {
+    const memory = await createMemoryRepository({ sessionVersion: 7 });
+
+    await expect(authenticateUser(
+      { username: "teacher-one", password: CURRENT_PASSWORD },
+      dependencies(memory.repository),
+    )).resolves.toMatchObject({ ok: true, session: { sessionVersion: 7 } });
+  });
+
+  it("rejects password changes from an already revoked session without comparing a password", async () => {
+    const memory = await createMemoryRepository({ sessionVersion: 2 });
+    const compare = vi.fn(verifyPassword);
+
+    await expect(changeUserPassword(
+      { userId: memory.user!.id, sessionVersion: 1, currentPassword: CURRENT_PASSWORD, newPassword: "another-strong-password" },
+      { ...dependencies(memory.repository), verifyPassword: compare },
+    )).resolves.toEqual({ ok: false, reason: "user_not_found" });
+    expect(compare).not.toHaveBeenCalled();
+    expect(memory.calls.updatePassword).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite a password after the session is revoked while hashing", async () => {
+    const memory = await createMemoryRepository();
+    const originalHash = memory.user!.passwordHash;
+    const hash = vi.fn(async (password: string) => {
+      memory.revokeSessions();
+      return hashPassword(password);
+    });
+
+    await expect(changeUserPassword(
+      { userId: memory.user!.id, sessionVersion: 1, currentPassword: CURRENT_PASSWORD, newPassword: "another-strong-password" },
+      { ...dependencies(memory.repository), hashPassword: hash },
+    )).resolves.toEqual({ ok: false, reason: "user_not_found" });
+    expect(memory.user?.passwordHash).toBe(originalHash);
+    expect(memory.user?.sessionVersion).toBe(2);
+  });
+
+  it("rejects password changes for deactivated accounts", async () => {
+    const memory = await createMemoryRepository({ isActive: false });
+    const compare = vi.fn(verifyPassword);
+
+    await expect(changeUserPassword(
+      { userId: memory.user!.id, sessionVersion: 1, currentPassword: CURRENT_PASSWORD, newPassword: "another-strong-password" },
+      { ...dependencies(memory.repository), verifyPassword: compare },
+    )).resolves.toEqual({ ok: false, reason: "user_not_found" });
+    expect(compare).not.toHaveBeenCalled();
     expect(memory.calls.updatePassword).not.toHaveBeenCalled();
   });
 });
