@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginForm } from "@/app/login/login-form";
 import { ChangePasswordForm } from "@/app/change-password/change-password-form";
-import { EmptyDashboard } from "@/components/empty-dashboard";
+import { AppShell } from "@/components/app-shell";
 import { LogoutButton } from "@/components/logout-button";
 
 const navigationMock = vi.hoisted(() => ({ replace: vi.fn() }));
@@ -29,14 +29,27 @@ describe("club authentication UI", () => {
     expect(screen.getByText(/首次登录后需要修改密码/)).toBeInTheDocument();
   });
 
-  it("shows distinct empty dashboard titles for teachers and members", () => {
-    const { rerender } = render(<EmptyDashboard role="teacher" name="Teacher One" />);
+  it("shows role-specific identity and navigation in the shared shell", () => {
+    const user = {
+      userId: "teacher-one", username: "teacher-one", name: "Teacher One",
+      role: "teacher" as const, mustChangePassword: false, sessionVersion: 1,
+    };
+    const { rerender } = render(<AppShell title="老师后台" user={user}><p>签到与请假</p></AppShell>);
     expect(screen.getByRole("heading", { name: "老师后台" })).toBeInTheDocument();
     expect(screen.getByText("Teacher One")).toBeInTheDocument();
+    expect(screen.getByText("老师", { exact: true })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "老师导航" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "概览" })).toHaveAttribute("href", "/teacher");
+    expect(screen.getByRole("link", { name: "场次" })).toHaveAttribute("href", "/teacher#meetings");
+    expect(screen.getByText("签到与请假")).toBeInTheDocument();
 
-    rerender(<EmptyDashboard role="member" name="Member One" />);
+    rerender(<AppShell title="成员首页" user={{ ...user, role: "member", name: "Member One" }}><p>我的出勤</p></AppShell>);
     expect(screen.getByRole("heading", { name: "成员首页" })).toBeInTheDocument();
     expect(screen.getByText("Member One")).toBeInTheDocument();
+    expect(screen.getByText("成员", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "老师导航" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "CLUB PORTAL" })).toHaveAttribute("href", "/member");
+    expect(screen.getByText("我的出勤")).toBeInTheDocument();
   });
 
   it("posts logout to the server and returns to the login page", async () => {
