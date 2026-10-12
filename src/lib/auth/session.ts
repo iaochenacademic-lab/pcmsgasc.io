@@ -25,7 +25,10 @@ function isSessionPayload(value: Record<string, unknown>): value is Record<strin
     typeof value.username === "string" &&
     (value.role === "teacher" || value.role === "member") &&
     typeof value.name === "string" &&
-    typeof value.mustChangePassword === "boolean"
+    typeof value.mustChangePassword === "boolean" &&
+    typeof value.sessionVersion === "number" &&
+    Number.isSafeInteger(value.sessionVersion) &&
+    value.sessionVersion >= 1
   );
 }
 
@@ -60,6 +63,7 @@ export async function readSessionToken(
       role: payload.role as UserRole,
       name: payload.name,
       mustChangePassword: payload.mustChangePassword,
+      sessionVersion: payload.sessionVersion,
     };
 
     return session;

@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-export function LoginForm() {
+export function LoginForm({ sessionExpired = false }: { sessionExpired?: boolean }) {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -44,6 +44,12 @@ export function LoginForm() {
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">社团管理平台</h1>
         <p className="mt-2 text-sm leading-6 text-slate-500">请使用老师或成员账号登录</p>
       </div>
+
+      {sessionExpired ? (
+        <p role="status" className="mb-5 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          登录已失效，请重新登录
+        </p>
+      ) : null}
 
       <form className="space-y-5" onSubmit={handleSubmit}>
         <div>

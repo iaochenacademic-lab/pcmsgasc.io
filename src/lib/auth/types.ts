@@ -6,6 +6,7 @@ export interface SessionPayload {
   role: UserRole;
   name: string;
   mustChangePassword: boolean;
+  sessionVersion: number;
 }
 
 export interface LoginInput {
@@ -15,6 +16,7 @@ export interface LoginInput {
 
 export interface ChangePasswordInput {
   userId: string;
+  sessionVersion: number;
   currentPassword: string;
   newPassword: string;
 }

@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { jwtDecrypt } from "jose";
+import { EncryptJWT, jwtDecrypt } from "jose";
 import {
   SESSION_COOKIE_OPTIONS,
   SESSION_MAX_AGE_SECONDS,
@@ -16,6 +16,7 @@ const SESSION: SessionPayload = {
   role: "teacher",
   name: "Sample Teacher",
   mustChangePassword: false,
+  sessionVersion: 1,
 };
 
 describe("encrypted session token", () => {
@@ -70,4 +71,18 @@ describe("encrypted session token", () => {
       maxAge: 2_592_000,
     });
   });
+
+  it.each([undefined, null, 0, -1, 1.5, "1", Number.MAX_SAFE_INTEGER + 1])(
+    "rejects a token with an absent or invalid session version: %s",
+    async (sessionVersion) => {
+      const issuedAt = Math.floor(NOW.getTime() / 1_000);
+      const token = await new EncryptJWT({ ...SESSION, sessionVersion })
+        .setProtectedHeader({ alg: "dir", enc: "A256GCM" })
+        .setIssuedAt(issuedAt)
+        .setExpirationTime(issuedAt + SESSION_MAX_AGE_SECONDS)
+        .encrypt(new Uint8Array(Buffer.from(TEST_SECRET, "base64url")));
+
+      await expect(readSessionToken(token, NOW)).resolves.toBeNull();
+    },
+  );
 });

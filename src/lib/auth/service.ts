@@ -1,5 +1,5 @@
 import "server-only";
-import { MAX_FAILED_LOGIN_ATTEMPTS } from "@/lib/auth/constants";
+import { DUMMY_PASSWORD_HASH, MAX_FAILED_LOGIN_ATTEMPTS } from "@/lib/auth/constants";
 import { isAccountLocked } from "@/lib/auth/lockout";
 import { hashPassword as defaultHashPassword, verifyPassword as defaultVerifyPassword } from "@/lib/auth/password";
 import { normalizeUsername, parseLoginInput, validateNewPassword } from "@/lib/auth/validation";
@@ -30,6 +30,7 @@ function toSessionPayload(user: {
   role: SessionPayload["role"];
   name: string;
   mustChangePassword: boolean;
+  sessionVersion: number;
 }): SessionPayload {
   return {
     userId: user.id,
@@ -37,6 +38,7 @@ function toSessionPayload(user: {
     role: user.role,
     name: user.name,
     mustChangePassword: user.mustChangePassword,
+    sessionVersion: user.sessionVersion,
   };
 }
 
@@ -49,8 +51,10 @@ export async function authenticateUser(
     return { ok: false, reason: "invalid_credentials" };
   }
 
+  const verify = deps.verifyPassword ?? defaultVerifyPassword;
   const user = await deps.repository.findByUsername(normalizeUsername(validInput.username));
-  if (!user) {
+  if (!user || !user.isActive) {
+    await verify(validInput.password, DUMMY_PASSWORD_HASH);
     return { ok: false, reason: "invalid_credentials" };
   }
 
@@ -59,7 +63,6 @@ export async function authenticateUser(
     return { ok: false, reason: "locked" };
   }
 
-  const verify = deps.verifyPassword ?? defaultVerifyPassword;
   const isValidPassword = await verify(validInput.password, user.passwordHash);
   if (!isValidPassword) {
     const failure = await deps.repository.recordLoginFailure(user.id);
@@ -74,7 +77,9 @@ export async function authenticateUser(
     return { ok: false, reason: "invalid_credentials" };
   }
 
-  await deps.repository.resetLoginFailures(user.id);
+  if (!(await deps.repository.resetLoginFailures(user.id))) {
+    return { ok: false, reason: "locked" };
+  }
   return { ok: true, session: toSessionPayload(user) };
 }
 
@@ -87,7 +92,7 @@ export async function changeUserPassword(
   }
 
   const user = await deps.repository.findById(input.userId);
-  if (!user) {
+  if (!user || !user.isActive || user.sessionVersion !== input.sessionVersion) {
     return { ok: false, reason: "user_not_found" };
   }
 
@@ -98,13 +103,13 @@ export async function changeUserPassword(
 
   const hash = deps.hashPassword ?? defaultHashPassword;
   const passwordHash = await hash(input.newPassword);
-  const updated = await deps.repository.updatePassword(user.id, passwordHash);
-  if (!updated) {
+  const sessionVersion = await deps.repository.changePassword(user.id, passwordHash, input.sessionVersion);
+  if (sessionVersion === null) {
     return { ok: false, reason: "user_not_found" };
   }
 
   return {
     ok: true,
-    session: toSessionPayload({ ...user, mustChangePassword: false }),
+    session: toSessionPayload({ ...user, mustChangePassword: false, sessionVersion }),
   };
 }

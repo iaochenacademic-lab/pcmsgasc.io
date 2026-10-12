@@ -2,11 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
 import { clearSessionCookie, setSessionCookie } from "@/lib/auth/cookies";
 import { readSessionToken } from "@/lib/auth/session";
-import type { SessionPayload } from "@/lib/auth/types";
-
-function isRolePath(pathname: string, role: "teacher" | "member"): boolean {
-  return pathname === `/${role}` || pathname.startsWith(`/${role}/`);
-}
 
 function redirectTo(request: NextRequest, pathname: string): NextResponse {
   const destination = request.nextUrl.clone();
@@ -16,16 +11,15 @@ function redirectTo(request: NextRequest, pathname: string): NextResponse {
 }
 
 function unauthenticatedApiResponse(): NextResponse {
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-}
-
-function roleHome(session: SessionPayload): "/teacher" | "/member" {
-  return session.role === "teacher" ? "/teacher" : "/member";
+  return NextResponse.json(
+    { ok: false, reason: "session_expired", error: "登录已失效，请重新登录" },
+    { status: 401, headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const pathname = request.nextUrl.pathname;
-  if (pathname.startsWith("/api/auth/")) {
+  if (pathname.startsWith("/api/auth/") || pathname === "/auth/expired") {
     return NextResponse.next();
   }
 
@@ -50,37 +44,15 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return response;
   }
 
-  let destination: string | null = null;
-  if (session.mustChangePassword && pathname !== "/change-password") {
-    destination = "/change-password";
-  } else if (pathname === "/" || pathname === "/login") {
-    destination = roleHome(session);
-  } else if (isRolePath(pathname, "teacher") && session.role !== "teacher") {
-    destination = roleHome(session);
-  } else if (isRolePath(pathname, "member") && session.role !== "member") {
-    destination = roleHome(session);
-  } else if (isApi && pathname.startsWith("/api/teacher/") && session.role !== "teacher") {
-    destination = roleHome(session);
-  } else if (isApi && pathname.startsWith("/api/member/") && session.role !== "member") {
-    destination = roleHome(session);
-  }
-
-  let response: NextResponse;
-  if (destination && isApi) {
-    response = NextResponse.json(
-      { error: "Forbidden", redirectTo: destination },
-      { status: 403 },
-    );
-  } else if (destination) {
-    response = redirectTo(request, destination);
-  } else {
-    response = NextResponse.next();
-  }
-
+  // Database-backed page guards and API wrappers own authorization. A stale
+  // cookie's role or password-change flag must not cause redirect loops.
+  const response = pathname === "/login"
+    ? redirectTo(request, "/")
+    : NextResponse.next();
   await setSessionCookie(response, session);
   return response;
 }
 
 export const config = {
-  matcher: ["/", "/login", "/teacher/:path*", "/member/:path*", "/change-password", "/api/:path*"],
+  matcher: ["/", "/login", "/auth/expired", "/teacher/:path*", "/member/:path*", "/change-password", "/api/:path*"],
 };
