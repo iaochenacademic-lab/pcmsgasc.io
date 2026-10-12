@@ -43,3 +43,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Cloudflare and private delivery material
+.wrangler/
+.dev.vars*
+/dist/
+/private/
+/artifacts/local/

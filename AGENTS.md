@@ -1,38 +1,29 @@
-# Codex 协作说明
+# Codex 協作說明
 
-## 项目定位与当前阶段
+## 現行架構
 
-这是一个面向学生社团的管理工具，由指导老师与开发同伴共同维护。当前是第一阶段的测试底座：Next.js、基础认证、角色区分和空首页已建立；签到/请假、活动报名、评分与排行榜尚未实现。开始工作前先读 `README.md` 和 `docs/PROJECT_STATUS.md`，以代码和当前状态文件为准，不要把路线图当成已实现功能。
+國際議題研習學會管理工具，React/TypeScript/Vite 前端、Cloudflare Workers API、D1、SQLite Durable Objects。開始前閱讀 README.md、docs/PROJECT_STATUS.md、docs/rebuild-plan.md、docs/REBUILD_PROGRESS.md，以實際程式和驗證紀錄為準。
 
-账号由老师预先创建并分发，网站永远不开放自助注册。本项目使用自定义 Supabase `public.users` 用户表，而不是 Supabase Auth 邮箱登录。
+舊 Next.js/Supabase 原型保留於 Git 歷史；2026-10-12 使用者明確批准第一版經 Code Review 後提交推送 GitHub，並清理 Git 歷史已保存的舊版檔案。其他任務仍不得在未獲授權時自行提交或推送。
 
-## 不可违反的安全边界
+## 安全邊界
 
-- Service Role Key 只允许留在服务端环境；不得使用 `NEXT_PUBLIC_` 前缀，不得写入源码、测试快照、日志、README、提交或浏览器响应。
-- 不读取、输出或提交 `.env.local`、真实密码、密码哈希或真实用户数据。`.env.local` 和 `.superpowers/` 是本地忽略文件/目录；除非用户另行要求，不要检查其内容或清理它们。
-- 密码采用 bcrypt，cost factor 为 12；不得记录明文密码。预置账号的初始密码必须逐账号随机生成且仅一次性显示，首次登录后必须改密。
-- 连续 10 次登录失败后锁定 5 分钟。涉及计数、解锁或成功登录清零的数据库操作必须考虑并发，使用受限、原子化的数据库接口。
-- Session 使用成熟库 `jose`，Cookie 必须保持 `Secure`、`HttpOnly`、`SameSite=Lax`；服务端负责身份与角色授权。
-- `public` schema 中的用户表必须启用 RLS，并仅向确有需要的服务端角色授权。数据库结构变更要添加 migration；对已连接的远端 Supabase 项目执行迁移前，先确认用户明确要求。
-- `docs/_to_remove/` 是维护者暂存待删资料的目录。未经用户明确要求，不要将其中内容当作现行规范，也不要擅自删除或恢复。
+- 無公開註冊，帳號由管理員預建；不得讀取或输出 `.env.local`、真實成員資料、真實密碼、密碼雜湊或憑證。
+- `.env.local`、`.dev.vars*`、`.superpowers/`、`private/` 不提交、不清理。未明確要求時不讀取其內容。
+- bcrypt cost 12；初始學生密碼逐人安全隨機生成、僅一次性交付、首次登入強制改密。來源 admin 密碼依批准的私人匯入流程保留。
+- 10次登入失敗鎖5分鐘，並發操作透過每帳號 DO 與原子資料庫條件執行。
+- jose Session，Cookie Secure/HttpOnly/SameSite=Lax；每次API在伺服器檢查身份、角色、帳號有效性及Session撤銷。
+- 私人請假、備註僅本人與管理員；排行榜僅社內登入成員可見。
+- 積分以百分之一分整數保存，修改需理由與操作者；結課、來源分數與快照保持原子性。
+- 結算僅逐一處理固定快照，不自動連鎖停用其他成員。
+- Cloudflare 只用免費方案，不自動升級。遠端資料變更與正式匯入需符合使用者授權。
+- 不把 design/ 的展示數據及假操作當作正式產品功能。
 
-## 开发与协作
+## 協作與驗證
 
-- 开始前检查 `git status` 和相关文件；保留所有已有及未提交改动，不要覆盖其他开发者的工作。
-- 修改应围绕用户当前明确指定的范围；先补测试再实现认证、安全或数据行为变更。
-- 不要自行执行 `git commit`、`git push`、创建 PR 或上传 GitHub。仓库维护者会手动提交和上传。
-- 功能完成后更新 `docs/PROJECT_STATUS.md`，如实写清实现内容、未完成事项和验证结果；不把未运行的测试写成通过。
-- 账号脚本 `scripts/create-user.ts` 尚未实现。尽管 `package.json` 已声明 `create-user` 命令，在该文件真正实现并通过测试前，不要建议或依赖该命令。
-
-## 验证命令
-
-按改动范围运行适当验证；全量检查可依次运行：
-
-```powershell
-npm test
-npm run typecheck
-npm run lint
-npm run build
-```
-
-不要并行启动测试与类型检查；曾出现过 Vitest worker 启动超时。涉及 Supabase 的改动还需验证迁移、RLS/权限及相关安全顾问结果，并在进度文档中记录远端验证是否执行。
+- 開始先檢查git status，保留已有未提交改動。資料、安全、認證變更先寫測試再實作。
+- 不讀取 `.superpowers/`；執行進度記錄在 docs/REBUILD_PROGRESS.md。
+- 每次完成更新 docs/PROJECT_STATUS.md，逐項記錄實際執行的驗證，未跑不得聲稱通過。
+- 依次运行 `npm test`、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check`；不得並行啟動測試和型別檢查。
+- 部署前另驗證本機Worker、D1 migrations、權限、Cookie、手機版及公開產物敏感資料掃描。
+- 不將密碼、hash或憑證寫入審計與日誌；錯誤訊息不透露内部資料。

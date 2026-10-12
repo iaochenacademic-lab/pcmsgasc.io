@@ -1,19 +1,2 @@
-import react from "@vitejs/plugin-react";
-import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
-
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-      "server-only": fileURLToPath(new URL("./src/test/server-only.ts", import.meta.url)),
-    },
-  },
-  test: {
-    environment: "jsdom",
-    setupFiles: ["./src/test/setup.ts"],
-    clearMocks: true,
-    restoreMocks: true,
-  },
-});
+import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { include: ['tests/**/*.test.ts'], environment: 'node', maxWorkers: 1, fileParallelism: false, testTimeout: 30000 } });
