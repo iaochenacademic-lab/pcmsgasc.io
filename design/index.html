@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="國際議題研習學會內部管理網站互動原型">
+  <title>國際議題研習學會｜社團管理</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳至主要內容</a>
+  <div id="app" class="app-shell">
+    <aside class="sidebar" aria-label="主要導覽" data-od-id="desktop-sidebar">
+      <div class="brand" data-od-id="society-brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 56 56" role="img">
+            <circle cx="28" cy="28" r="22"></circle>
+            <ellipse cx="28" cy="28" rx="10" ry="22"></ellipse>
+            <path d="M8 20h40M6 28h44M8 36h40M28 6v44"></path>
+          </svg>
+        </div>
+        <div><strong>國際議題研習學會</strong><span>international studies society</span></div>
+      </div>
+      <div id="desktop-role" class="role-switch" data-od-id="desktop-role-switch"></div>
+      <nav id="desktop-nav" class="nav-list"></nav>
+      <div class="sidebar-note">
+        <span class="eyebrow">prototype / 2026</span>
+        <p>所有姓名、學號與紀錄均為虛構展示資料。</p>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar" data-od-id="topbar">
+        <div class="mobile-brand">
+          <svg viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="28" r="22"></circle><ellipse cx="28" cy="28" rx="10" ry="22"></ellipse><path d="M8 20h40M6 28h44M8 36h40M28 6v44"></path></svg>
+          <span>國際議題研習學會</span>
+        </div>
+        <div class="topbar-context"><span id="section-kicker" class="eyebrow"></span><strong id="section-title"></strong></div>
+        <div class="topbar-actions">
+          <span class="demo-badge">展示資料</span>
+          <button class="icon-button" type="button" data-action="open-auth" aria-label="預覽登入畫面" title="預覽登入畫面">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20c.7-4 3-6 7-6s6.3 2 7 6"></path></svg>
+          </button>
+          <button id="mobile-menu-button" class="icon-button mobile-only" type="button" data-action="open-menu" aria-label="開啟全部頁面" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+          </button>
+        </div>
+      </header>
+
+      <main id="main-content" tabindex="-1" data-od-id="main-content"></main>
+    </div>
+
+    <nav id="mobile-nav" class="mobile-nav" aria-label="手機主要導覽"></nav>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
+  <script src="app.js"></script>
+</body>
+</html>
