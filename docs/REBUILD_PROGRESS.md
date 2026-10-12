@@ -39,7 +39,7 @@
 
 ## GitHub 交付
 
-本機驗收與審查已完成；正在提交重建分支、建立PR，將使用 Code Review 檢查對應提交的CI結果後更新主分支。未完成的GitHub步驟不可視為已上傳。
+第一版已推送到 GitHub，透過 [PR #3](https://github.com/iaochenacademic-lab/pcmsgasc.io/pull/3) 交付主分支。該PR的Checks與合併狀態為遠端即時依據。`90919b1` 為完整實作提交。`Code Review` 外掛兩次回報無法連接GitHub，未取得其檢查結果；程式碼由獨立審查者審查與複核，遠端CI改由已連接的GitHub外掛直接讀取。
 
 ## 正式上線仍待完成
 

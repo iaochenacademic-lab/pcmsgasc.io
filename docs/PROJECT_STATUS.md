@@ -20,7 +20,7 @@
 
 詳細結果以 [重建進度](REBUILD_PROGRESS.md) 為準。已用虛構資料在本機 workerd / D1 / Account Durable Objects 完成245次 API 驗收，包括100人實際登入與簽到。
 
-獨立審查提出三項問題：結課與取消競態、封存快照漏掉交錯寫入分數、前端誤以即時分數阻止歷史截止結算。均已修正，審查者複核關閉；新增相應 SQLite 回歸。修正後全套檢查通過，GitHub 交付進行中。
+獨立審查提出三項問題：結課與取消競態、封存快照漏掉交錯寫入分數、前端誤以即時分數阻止歷史截止結算。均已修正，審查者複核關閉；新增相應 SQLite 回歸。修正後65项測試及全套檢查通過，第一版已推送至 [GitHub PR #3](https://github.com/iaochenacademic-lab/pcmsgasc.io/pull/3)。遠端CI與合併狀態請見該PR；Code Review外掛連線失敗的限制已記錄於進度文件。
 
 ## 尚未完成的正式上線
 
