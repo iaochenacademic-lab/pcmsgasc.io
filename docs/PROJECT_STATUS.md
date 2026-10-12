@@ -6,9 +6,9 @@
 
 第二阶段的认证加固、账号管理脚本、签到与请假领域服务、API 及老师和成员界面已实现。阶段 A、B、C 的本地四项检查均已串行通过；三项新迁移已应用到当前连接的 Supabase 项目，数据库类型、迁移版本、RLS、权限及安全顾问检查已完成。真实数据库并发验收及 C5 HTTP 端到端冒烟均已通过，测试数据已清理并独立复查。
 
-**C5 最终真实 HTTP 与 Cookie 验收 15/15 通过；Draft PR 待创建。** 浏览器工具运行时启动失败，目前没有浏览器视觉验收通过的结论。活动报名、评分排行榜、生产配置和 Vercel 部署属于后续阶段。
+**C5 最终真实 HTTP 与 Cookie 验收 15/15 通过；[Draft PR #2](https://github.com/iaochenacademic-lab/pcmsgasc.io/pull/2) 已创建。** 浏览器工具运行时启动失败，目前没有浏览器视觉验收通过的结论。活动报名、评分排行榜、生产配置和 Vercel 部署属于后续阶段。
 
-发布状态：本地七个阶段提交已完成。当前 Git 命令行没有 GitHub 登录凭据；已连接的 GitHub 集成创建 tree 时返回 `403 Resource not accessible by integration`，另一 GitHub MCP 连接返回未认证请求限流，尚无可用写入通道。因此尚未创建远端分支或 Draft PR，main 未修改。完整源码、Git bundle 和拟用 PR 描述已在本次任务交付目录准备好，恢复仓库写权限后继续发布。
+发布状态：七个实施阶段提交已通过 GitHub CLI 推送到远端分支 `codex/phase2-auth-attendance`，并创建面向 `main` 的 [Draft PR #2](https://github.com/iaochenacademic-lab/pcmsgasc.io/pull/2)。本次另追加发布状态文档提交；没有合并、force push 或修改 main。完整源码、Git bundle、PR 描述及验收报告保存在本次任务交付目录。浏览器视觉与真实点击验收仍待完成，PR 保持 Draft。
 
 ## 已实现内容
 
@@ -126,7 +126,7 @@
 
 ## 下一步
 
-1. 创建第二阶段 Draft PR，提交实现、迁移及上述验收记录。
+1. 审阅第二阶段 [Draft PR #2](https://github.com/iaochenacademic-lab/pcmsgasc.io/pull/2) 中的实现、迁移及上述验收记录。
 2. 浏览器运行时可用后完成真实页面视觉与交互检查。
 3. 活动与比赛报名。
 4. 评分与排行榜。
