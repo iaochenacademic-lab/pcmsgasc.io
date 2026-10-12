@@ -14,6 +14,217 @@ export type Database = {
   }
   public: {
     Tables: {
+      attendance_records: {
+        Row: {
+          checked_in_at: string | null
+          created_at: string
+          id: string
+          meeting_id: string
+          note: string | null
+          source: string
+          status: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          checked_in_at?: string | null
+          created_at?: string
+          id?: string
+          meeting_id: string
+          note?: string | null
+          source: string
+          status: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          checked_in_at?: string | null
+          created_at?: string
+          id?: string
+          meeting_id?: string
+          note?: string | null
+          source?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_records_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_records_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_records_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checkin_code_failures: {
+        Row: {
+          failed_count: number
+          meeting_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          failed_count: number
+          meeting_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          failed_count?: number
+          meeting_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkin_code_failures_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkin_code_failures_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_requests: {
+        Row: {
+          created_at: string
+          id: string
+          leave_type: string
+          meeting_id: string
+          reason: string
+          review_comment: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          leave_type: string
+          meeting_id: string
+          reason: string
+          review_comment?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          leave_type?: string
+          meeting_id?: string
+          reason?: string
+          review_comment?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_requests_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meetings: {
+        Row: {
+          cancelled_at: string | null
+          checkin_code: string
+          created_at: string
+          created_by: string
+          ends_at: string
+          id: string
+          late_after_minutes: number
+          location: string | null
+          starts_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          checkin_code: string
+          created_at?: string
+          created_by: string
+          ends_at: string
+          id?: string
+          late_after_minutes?: number
+          location?: string | null
+          starts_at: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          checkin_code?: string
+          created_at?: string
+          created_by?: string
+          ends_at?: string
+          id?: string
+          late_after_minutes?: number
+          location?: string | null
+          starts_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meetings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           created_at: string
@@ -72,6 +283,14 @@ export type Database = {
         Args: { p_is_active: boolean; p_username: string }
         Returns: boolean
       }
+      cancel_leave: {
+        Args: {
+          p_leave_id: string
+          p_session_version: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
       change_user_password: {
         Args: {
           p_expected_session_version: number
@@ -79,6 +298,38 @@ export type Database = {
           p_user_id: string
         }
         Returns: number
+      }
+      create_meeting: {
+        Args: {
+          p_actor_id: string
+          p_checkin_code: string
+          p_ends_at: string
+          p_late_after_minutes: number
+          p_location: string
+          p_session_version: number
+          p_starts_at: string
+          p_title: string
+        }
+        Returns: Json
+      }
+      manage_meeting: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_data: Json
+          p_meeting_id: string
+          p_session_version: number
+        }
+        Returns: Json
+      }
+      member_check_in: {
+        Args: {
+          p_code: string
+          p_meeting_id: string
+          p_session_version: number
+          p_user_id: string
+        }
+        Returns: Json
       }
       record_login_failure: {
         Args: { p_user_id: string }
@@ -88,6 +339,37 @@ export type Database = {
         }[]
       }
       reset_login_failures: { Args: { p_user_id: string }; Returns: boolean }
+      review_leave: {
+        Args: {
+          p_actor_id: string
+          p_comment: string
+          p_decision: string
+          p_leave_id: string
+          p_session_version: number
+        }
+        Returns: Json
+      }
+      set_attendance: {
+        Args: {
+          p_actor_id: string
+          p_meeting_id: string
+          p_note: string
+          p_session_version: number
+          p_status: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      submit_leave: {
+        Args: {
+          p_leave_type: string
+          p_meeting_id: string
+          p_reason: string
+          p_session_version: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
