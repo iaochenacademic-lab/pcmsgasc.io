@@ -243,6 +243,23 @@ describe("auth route handlers and proxy", () => {
     expect(response.cookies.get(SESSION_COOKIE_NAME)?.maxAge).toBe(0);
   });
 
+  it.each([undefined, "invalid-token"])("uses the API error contract for an unauthenticated proxy request (%s)", async (token) => {
+    const request = new NextRequest("http://localhost/api/member/check-in", {
+      method: "POST",
+      headers: token ? { cookie: `${SESSION_COOKIE_NAME}=${token}` } : {},
+    });
+    const response = await proxy(request);
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      ok: false,
+      reason: "session_expired",
+      error: "登录已失效，请重新登录",
+    });
+    if (token) expect(response.cookies.get(SESSION_COOKIE_NAME)?.maxAge).toBe(0);
+  });
+
   it("leaves protected-page role authorization to database-backed guards", async () => {
     const token = await createSessionToken(session("member"));
     const response = await proxy(cookieRequest("/teacher", token));

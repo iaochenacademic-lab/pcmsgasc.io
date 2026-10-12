@@ -12,7 +12,7 @@ function redirectTo(request: NextRequest, pathname: string): NextResponse {
 
 function unauthenticatedApiResponse(): NextResponse {
   return NextResponse.json(
-    { error: "请重新登录" },
+    { ok: false, reason: "session_expired", error: "登录已失效，请重新登录" },
     { status: 401, headers: { "Cache-Control": "no-store" } },
   );
 }
