@@ -68,3 +68,11 @@
 - 决策：改密 RPC 增加预期 session_version 条件，阻止已撤销的在途改密；Proxy 只负责 Cookie 与登录路由，角色及强制改密以数据库守卫为准；改密请求显式挑选密码字段，客户端不能覆盖会话身份。
 - 决策：同源403按规格仅续期可解密Cookie，不查库、不授权、不执行业务；无法解密配置时500/no-store且不签发Cookie。
 - 用户已提供本地配置文件，已复制至 Git 忽略位置；仅确认目标主机为 epsxsbskwlewmsstrzfu.supabase.co 及必要配置存在，未读取或展示内容。
+
+### 阶段 B 验收结果
+
+- 账号脚本已实现单账号/CSV、重置、停用/启用、dry-run；新用户名与姓名规则已覆盖测试。CSV全量检查通过才执行单次批量insert，密码只在成功后一次性输出，失败日志不包含原始数据库异常。
+- 串行验收：147 tests / 12 files 通过；typecheck、lint、build通过。
+- `npm run create-user -- --csv ../smoke-members.csv --dry-run` 已对目标远端实跑通过（3个账号，未生成密码、未写库）。随后通过真实CLI单批创建smoke-teacher/smoke-m1/smoke-m2，核对角色、is_active=true、must_change_password=true、session_version=1。初始密码输出仅由测试进程内存接收，没有写入日志或文件；C5会重置为新的临时凭据再登录。
+- 已应用并核对迁移 `20261012041338_account_activation`；admin_set_user_active以SQL原子停用并递增版本，启用保持版本。类型已重新生成，权限复核通过、安全顾问无新增告警。
+- Computer Use浏览器运行时启动失败（MXC launcher / HRESULT 0x80070003）；按C5允许的回退方式使用真实HTTP请求与Cookie进行端到端冒烟。

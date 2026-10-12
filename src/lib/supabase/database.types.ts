@@ -68,6 +68,10 @@ export type Database = {
         Args: { p_password_hash: string; p_username: string }
         Returns: boolean
       }
+      admin_set_user_active: {
+        Args: { p_is_active: boolean; p_username: string }
+        Returns: boolean
+      }
       change_user_password: {
         Args: {
           p_expected_session_version: number

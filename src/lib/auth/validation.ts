@@ -2,12 +2,10 @@ import { Buffer } from "node:buffer";
 import "server-only";
 import { NEW_PASSWORD_MIN_LENGTH } from "@/lib/auth/constants";
 import type { LoginInput } from "@/lib/auth/types";
+import { normalizeUsername } from "@/lib/auth/username";
+export { normalizeUsername, isValidUsername } from "@/lib/auth/username";
 
 const BCRYPT_MAX_PASSWORD_BYTES = 72;
-
-export function normalizeUsername(username: string): string {
-  return username.trim().toLowerCase();
-}
 
 export function parseLoginInput(input: unknown): LoginInput | null {
   if (typeof input !== "object" || input === null) {
