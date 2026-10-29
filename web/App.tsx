@@ -1,17 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Menu, UserRound, LogOut } from 'lucide-react';
+import { Archive, CalendarDays, CalendarOff, ClipboardCheck, FileText, Gavel, House, Info, LayoutDashboard, LogOut, Menu, PenLine, ScrollText, Settings as SettingsIcon, SlidersHorizontal, Trophy, UserRound, Users, type LucideIcon } from 'lucide-react';
 import { ApiError, api, errorMessage } from './api';
 import type { Actor } from './types';
 import { Account, Login } from './auth';
 import { DataState, Globe, Modal, ToastContext } from './ui';
 import { Checkin, Credits, Dashboard, Events, RankingsPage, Records } from './student';
 import { Members } from './members';
+import { LeaveAdmin, MyLeave } from './leave';
 import { ClassesAdmin } from './classes';
 import { EventsAdmin } from './events';
 import { Adjustments, Archives, AuditPage, Decisions, Settings } from './governance';
 
-const studentNav = [['dashboard', '本期首頁', 'home'], ['checkin', '課堂簽到', 'attendance'], ['events', '活動一覽', 'programme'], ['record', '我的紀錄', 'personal record'], ['leaderboard', '積分排行榜', 'ranking'], ['account', '帳號設定', 'account'], ['credits', '開發致謝', 'acknowledgements']];
-const adminNav = [['dashboard', '管理總覽', 'overview'], ['members', '成員管理', 'directory'], ['sessions', '課次與點名', 'attendance'], ['activities', '活動管理', 'programme'], ['leaderboard', '積分排行榜', 'ranking'], ['record', '成員積分紀錄', 'records'], ['adjustments', '分數修正', 'score ledger'], ['thresholds', '門檻設定', 'thresholds'], ['decisions', '截止待審', 'review'], ['archives', '封存與新期', 'archive'], ['logs', '操作紀錄', 'audit & export'], ['account', '帳號設定', 'account'], ['credits', '開發致謝', 'acknowledgements']];
+interface NavItem { id: string; label: string; short: string; icon: LucideIcon }
+interface NavGroup { label: string; items: NavItem[] }
+const studentNav: NavGroup[] = [
+  { label: '', items: [{ id: 'dashboard', label: '本期首頁', short: '首頁', icon: House }, { id: 'checkin', label: '課堂簽到', short: '簽到', icon: ClipboardCheck }, { id: 'events', label: '活動一覽', short: '活動', icon: CalendarDays }, { id: 'record', label: '我的紀錄', short: '紀錄', icon: FileText }, { id: 'leaderboard', label: '積分排行榜', short: '排行', icon: Trophy }, { id: 'leave', label: '請假申請', short: '請假', icon: CalendarOff }] },
+  { label: '其他', items: [{ id: 'account', label: '帳號設定', short: '帳號', icon: SettingsIcon }, { id: 'credits', label: '開發致謝', short: '致謝', icon: Info }] },
+];
+const adminNav: NavGroup[] = [
+  { label: '日常', items: [{ id: 'dashboard', label: '管理總覽', short: '總覽', icon: LayoutDashboard }, { id: 'members', label: '成員管理', short: '成員', icon: Users }, { id: 'sessions', label: '課次與點名', short: '點名', icon: ClipboardCheck }, { id: 'activities', label: '活動管理', short: '活動', icon: CalendarDays }, { id: 'leave', label: '請假管理', short: '請假', icon: CalendarOff }] },
+  { label: '積分', items: [{ id: 'leaderboard', label: '積分排行榜', short: '排行', icon: Trophy }, { id: 'record', label: '成員積分紀錄', short: '紀錄', icon: FileText }, { id: 'adjustments', label: '分數修正', short: '修正', icon: PenLine }] },
+  { label: '學期結算', items: [{ id: 'thresholds', label: '門檻與計分', short: '門檻', icon: SlidersHorizontal }, { id: 'decisions', label: '截止待審', short: '待審', icon: Gavel }, { id: 'archives', label: '封存與新期', short: '封存', icon: Archive }] },
+  { label: '系統', items: [{ id: 'logs', label: '操作紀錄與匯出', short: '匯出', icon: ScrollText }, { id: 'account', label: '帳號設定', short: '帳號', icon: SettingsIcon }, { id: 'credits', label: '開發致謝', short: '致謝', icon: Info }] },
+];
+function NavGroups({ groups, active, navigate }: { groups: NavGroup[]; active: string; navigate: (id: string) => void }) {
+  return <>{groups.map(group => <div className="nav-group" key={group.label}>{group.label && <span className="nav-group-label">{group.label}</span>}{group.items.map(({ id, label, icon: Icon }) => <button key={id} className="nav-button" onClick={() => navigate(id)} aria-current={active === id ? 'page' : undefined}><Icon/>{label}</button>)}</div>)}</>;
+}
 const initialPage = () => window.location.hash.slice(1) || (window.location.pathname === '/checkin' ? 'checkin' : 'dashboard');
 
 export function App() {
@@ -24,9 +38,11 @@ export function App() {
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 6500); return () => clearTimeout(timer); }, [toast]);
   const navigate = (destination: string) => { window.location.hash = destination; setPage(destination); setMenu(false); window.scrollTo({ top: 0 }); requestAnimationFrame(() => document.getElementById('main-content')?.focus()); };
   const logout = async () => { if (loggingOut) return; setLoggingOut(true); try { await api('/api/auth/logout', 'POST', {}); setUser(null); } catch (failure) { notify(errorMessage(failure)); } finally { setLoggingOut(false); } };
-  const nav = user?.role === 'admin' ? adminNav : studentNav;
-  const selected = nav.find(item => item[0] === page) ?? nav[0];
-  const activePage = selected[0];
+  const groups = user?.role === 'admin' ? adminNav : studentNav;
+  const nav = groups.flatMap(group => group.items);
+  const selected = nav.find(item => item.id === page) ?? nav[0];
+  const activePage = selected.id;
+  const mobileNav = nav.slice(0, 4);
   function content() {
     if (!user) return null;
     if (user.mustChangePassword || activePage === 'account') return <Account user={user} onUser={setUser} logout={() => void logout()} forced={user.mustChangePassword}/>;
@@ -44,8 +60,9 @@ export function App() {
       case 'decisions': return <Decisions/>;
       case 'archives': return <Archives navigate={navigate}/>;
       case 'logs': return <AuditPage/>;
+      case 'leave': return user.role === 'admin' ? <LeaveAdmin/> : <MyLeave/>;
       default: return <Credits/>;
     }
   }
-  return <ToastContext.Provider value={notify}>{!ready || error ? <main className="startup"><div className="auth-mark"><Globe/></div><DataState loading={!ready} error={error} retry={() => void loadUser()}><></></DataState></main> : !user ? <Login onUser={setUser}/> : <><a className="skip-link" href="#main-content" onClick={event => { event.preventDefault(); document.getElementById('main-content')?.focus(); }}>跳至主要內容</a><div className="app-shell"><aside className="sidebar" aria-label="主要導覽"><div className="brand"><span className="brand-mark"><Globe/></span><div><strong>國際議題研習學會</strong><span>international studies society</span></div></div><div className="identity-label"><span className="eyebrow">{user.role === 'admin' ? 'administration' : 'member workspace'}</span><strong>{user.name}<small>{user.role === 'admin' ? '管理員' : user.className}</small></strong></div><nav className="nav-list">{!user.mustChangePassword && nav.map(([id, label], index) => <button key={id} className="nav-button" onClick={() => navigate(id)} aria-current={activePage === id ? 'page' : undefined}><span className="nav-number">{String(index + 1).padStart(2, '0')}</span>{label}</button>)}</nav><div className="sidebar-note"><span className="eyebrow">observe · question · understand</span><p>探索世界，也記錄每一次參與。<br/>所有時間均以東八區顯示。</p></div></aside><div className="workspace"><header className="topbar"><div className="mobile-brand"><Globe/><span>國際議題研習學會</span></div><div className="topbar-context"><span className="eyebrow">{selected[2]}</span><strong>{user.mustChangePassword ? '首次登入' : selected[1]}</strong></div><div className="topbar-actions"><button className="icon-button" onClick={() => navigate('account')} aria-label="帳號設定"><UserRound/></button><button className="icon-button" disabled={loggingOut} onClick={() => void logout()} aria-label="登出"><LogOut/></button>{!user.mustChangePassword && <button className="icon-button mobile-only" onClick={() => setMenu(true)} aria-label="開啟全部頁面" aria-expanded={menu}><Menu/></button>}</div></header><main id="main-content" tabIndex={-1} key={activePage}>{content()}</main></div>{!user.mustChangePassword && <nav className="mobile-nav" aria-label="手機主要導覽">{nav.slice(0, 4).map(([id, label], index) => <button key={id} data-index={String(index + 1).padStart(2, '0')} aria-current={id === activePage ? 'page' : undefined} onClick={() => navigate(id)}>{label.replace('管理', '').replace('本期', '')}</button>)}<button data-index="··" aria-current={nav.slice(0, 4).some(item => item[0] === activePage) ? undefined : 'page'} onClick={() => setMenu(true)}>更多</button></nav>}</div>{menu && <Modal title="全部頁面" onClose={() => setMenu(false)}><nav className="mobile-sheet-list">{nav.map(([id, label]) => <button key={id} className="nav-button" aria-current={id === activePage ? 'page' : undefined} onClick={() => navigate(id)}>{label}</button>)}</nav></Modal>}</>}<div className="toast-root" role="status" aria-live="polite" aria-atomic="true">{toast && <div className="toast">{toast}</div>}</div></ToastContext.Provider>;
+  return <ToastContext.Provider value={notify}>{!ready || error ? <main className="startup"><div className="auth-mark"><Globe/></div><DataState loading={!ready} error={error} retry={() => void loadUser()}><></></DataState></main> : !user ? <Login onUser={setUser}/> : <><a className="skip-link" href="#main-content" onClick={event => { event.preventDefault(); document.getElementById('main-content')?.focus(); }}>跳至主要內容</a><div className="app-shell"><aside className="sidebar" aria-label="主要導覽"><div className="brand"><span className="brand-mark"><Globe/></span><strong>國際議題研習學會</strong></div><div className="identity-label"><strong>{user.name}</strong><small>{user.role === 'admin' ? '管理員' : user.className}</small></div><nav className="nav-list">{!user.mustChangePassword && <NavGroups groups={groups} active={activePage} navigate={navigate}/>}</nav><p className="sidebar-note">所有時間均為東八區。</p></aside><div className="workspace"><header className="topbar"><div className="mobile-brand"><Globe/><span>國際議題研習學會</span></div><div className="topbar-context"><strong>{user.mustChangePassword ? '首次登入' : selected.label}</strong></div><div className="topbar-actions"><button className="icon-button" onClick={() => navigate('account')} aria-label="帳號設定"><UserRound/></button><button className="icon-button" disabled={loggingOut} onClick={() => void logout()} aria-label="登出"><LogOut/></button>{!user.mustChangePassword && <button className="icon-button mobile-only" onClick={() => setMenu(true)} aria-label="開啟全部頁面" aria-expanded={menu}><Menu/></button>}</div></header><main id="main-content" tabIndex={-1} key={activePage}>{content()}</main></div>{!user.mustChangePassword && <nav className="mobile-nav" aria-label="手機主要導覽">{mobileNav.map(({ id, short, icon: Icon }) => <button key={id} aria-current={id === activePage ? 'page' : undefined} onClick={() => navigate(id)}><Icon/>{short}</button>)}<button aria-current={mobileNav.some(item => item.id === activePage) ? undefined : 'page'} onClick={() => setMenu(true)}><Menu/>更多</button></nav>}</div>{menu && <Modal title="全部頁面" onClose={() => setMenu(false)}><nav className="mobile-sheet-list"><NavGroups groups={groups} active={activePage} navigate={navigate}/></nav></Modal>}</>}<div className="toast-root" role="status" aria-live="polite" aria-atomic="true">{toast && <div className="toast">{toast}</div>}</div></ToastContext.Provider>;
 }

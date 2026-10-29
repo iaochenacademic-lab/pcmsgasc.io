@@ -1,11 +1,18 @@
 import type { Actor, Env } from './env';
 import { eventLabels, type EventKind } from '../shared/domain';
-import { all,audit,auditAfterChange,body,cycle,fail,integer,json,one,q,reason,string,studentMember,timestamp,transact,writable,type Db,type Row } from './club-store';
+import { all,audit,auditAfterChange,body,cycle,fail,integer,json,one,q,reason,string,studentMember,studentMembers,timestamp,transact,writable,type Db,type Row } from './club-store';
 import { participationView } from './club-views';
 
 interface ClubEvent {
   id:string;cycleId:string;title:string;kind:EventKind;description:string;location:string;startsAt:number;endsAt:number|null;
   points:number;status:'published'|'cancelled';
+}
+// Gated on the audit row written by auditAfterChange, so it only runs when participation changed.
+function syncScore(db:Db,actor:Actor,eventId:string,memberId:string,why:string,now:number,changeId:string) {
+  return q(db,`INSERT INTO score_sources(cycle_id,member_id,source_type,source_id,amount,effective,reason,actor_id,updated_at)
+    SELECT e.cycle_id,p.member_id,'event',e.id,CASE WHEN p.active=1 THEN p.points ELSE 0 END,p.active,?,?,?
+    FROM events e JOIN participation p ON p.event_id=e.id WHERE e.id=? AND p.member_id=? AND e.status='published' AND EXISTS(SELECT 1 FROM club_audit WHERE id=?)
+    ON CONFLICT(cycle_id,member_id,source_type,source_id) DO UPDATE SET amount=excluded.amount,effective=excluded.effective,reason=excluded.reason,actor_id=excluded.actor_id,updated_at=excluded.updated_at`,why,actor.id,now,eventId,memberId,changeId);
 }
 async function getEvent(db:Db,id:string) {
   const value=await one<ClubEvent>(db,'SELECT * FROM events WHERE id=?',id);
@@ -36,7 +43,7 @@ export async function adminEvents(request:Request,env:Env,actor:Actor,path:strin
     const title=string(data.title,'活動名稱'),description=string(data.description,'活動說明',10000,true),location=string(data.location,'地點',500,true);
     const startsAt=timestamp(data.startsAt,'開始時間'),endsAt=data.endsAt==null ? null:timestamp(data.endsAt,'結束時間');
     if(endsAt!==null && endsAt<startsAt) fail('結束時間不可早於開始時間。');
-    const points=kind==='competition' ? integer(data.points ?? 0,'比賽分數') : 50;
+    const points=kind==='competition' ? integer(data.points ?? 0,'比賽分數') : config.scoreEvent;
     await transact(db,[audit(db,actor,config.id,'event.create',id,'發布活動'),
       q(db,'INSERT INTO events(id,cycle_id,title,kind,description,location,starts_at,ends_at,points) VALUES(?,?,?,?,?,?,?,?,?)',id,config.id,title,kind,description,location,startsAt,endsAt,points)]);
     return json({event:await getEvent(db,id)},201);
@@ -66,11 +73,27 @@ export async function adminEvents(request:Request,env:Env,actor:Actor,path:strin
     if(result[0].meta.changes===0) fail('活動狀態已改變，請重新整理。',409);
     return json({event:await getEvent(db,item.id)});
   }
+  if(match[2]==='participants' && request.method==='PUT' && data.memberIds!==undefined) {
+    // Bulk mode only adds new or revoked members; existing active entries keep their points and results.
+    if(item.status!=='published') fail('活動已取消。',409);
+    const members=await studentMembers(db,data.memberIds);
+    const points=item.kind==='competition' ? integer(data.points ?? item.points,'比賽分數'):item.points;
+    const results=await transact(db,members.flatMap(member=>{
+      const changeId=crypto.randomUUID();
+      return [q(db,`INSERT INTO participation(event_id,member_id,points,result,note,active,updated_at,actor_id,reason)
+          SELECT id,?,?,'','',1,?,?,? FROM events WHERE id=? AND status='published'
+          ON CONFLICT(event_id,member_id) DO UPDATE SET points=excluded.points,active=1,updated_at=excluded.updated_at,actor_id=excluded.actor_id,reason=excluded.reason
+          WHERE participation.active=0`,member.id,points,now,actor.id,why,item.id),
+        auditAfterChange(db,actor,item.cycleId,'event.participation',`${item.id}:${member.id}`,why,now,changeId),
+        syncScore(db,actor,item.id,member.id,why,now,changeId)];
+    }));
+    return json({added:results.filter((_,index)=>index%3===0).reduce((total,result)=>total+result.meta.changes,0)});
+  }
   if(match[2]==='participants' && request.method==='PUT') {
     if(item.status!=='published') fail('活動已取消。',409);
     const member=await studentMember(db,data.memberId);
     if(typeof data.active!=='boolean') fail('請指定是否參與。');
-    const points=item.kind==='competition' ? integer(data.points ?? item.points,'比賽分數'):50;
+    const points=item.kind==='competition' ? integer(data.points ?? item.points,'比賽分數'):item.points;
     const result=string(data.result,'成績',1000,true),note=string(data.note,'備註',2000,true);
     const changeId=crypto.randomUUID();
     const results=await transact(db,[q(db,`INSERT INTO participation(event_id,member_id,points,result,note,active,updated_at,actor_id,reason)
@@ -78,10 +101,7 @@ export async function adminEvents(request:Request,env:Env,actor:Actor,path:strin
         ON CONFLICT(event_id,member_id) DO UPDATE SET points=excluded.points,result=excluded.result,note=excluded.note,active=excluded.active,
         updated_at=excluded.updated_at,actor_id=excluded.actor_id,reason=excluded.reason`,member.id,points,result,note,+data.active,now,actor.id,why,item.id),
       auditAfterChange(db,actor,item.cycleId,'event.participation',`${item.id}:${member.id}`,why,now,changeId),
-      q(db,`INSERT INTO score_sources(cycle_id,member_id,source_type,source_id,amount,effective,reason,actor_id,updated_at)
-        SELECT e.cycle_id,p.member_id,'event',e.id,CASE WHEN p.active=1 THEN p.points ELSE 0 END,p.active,?,?,?
-        FROM events e JOIN participation p ON p.event_id=e.id WHERE e.id=? AND p.member_id=? AND e.status='published' AND EXISTS(SELECT 1 FROM club_audit WHERE id=?)
-        ON CONFLICT(cycle_id,member_id,source_type,source_id) DO UPDATE SET amount=excluded.amount,effective=excluded.effective,reason=excluded.reason,actor_id=excluded.actor_id,updated_at=excluded.updated_at`,why,actor.id,now,item.id,member.id,changeId)]);
+      syncScore(db,actor,item.id,member.id,why,now,changeId)]);
     if(results[0].meta.changes===0) fail('活動狀態已改變，請重新整理。',409);
     const participation=await one(db,'SELECT member_id,points,result,note,active FROM participation WHERE event_id=? AND member_id=?',item.id,member.id);
     return json({participation:participation ? participationView(participation):null});

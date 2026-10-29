@@ -1,13 +1,13 @@
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import type { Actor, Env } from '../worker/env';
 
 // This adapter executes actual migration SQL, constraints, triggers, and transactions.
 // Only the remote D1 transport is replaced; production queries are unmodified.
 export function clubDatabase() {
   const sqlite = new DatabaseSync(':memory:');
-  sqlite.exec(readFileSync(new URL('../migrations/0001_accounts.sql', import.meta.url), 'utf8'));
-  sqlite.exec(readFileSync(new URL('../migrations/0002_club.sql', import.meta.url), 'utf8'));
+  const migrations = new URL('../migrations/', import.meta.url);
+  for (const file of readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()) sqlite.exec(readFileSync(new URL(file, migrations), 'utf8'));
   const prepare = (sql: string, values: unknown[] = []) => {
     const execute = () => {
       const query = sqlite.prepare(sql);

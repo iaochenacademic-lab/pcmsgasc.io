@@ -14,8 +14,13 @@ export async function adminCycles(request:Request,env:Env,actor:Actor,path:strin
     const yellowScore=data.yellowScore===undefined ? config.yellowScore:data.yellowScore===null ? null:integer(data.yellowScore,'黃線');
     const cutoffAt=data.cutoffAt===undefined ? config.cutoffAt:data.cutoffAt===null ? null:timestamp(data.cutoffAt,'截止時間');
     if(redMode==='manual' && redScore===null) fail('手動紅線必須填寫分數。');
+    const redCount=data.redCount===undefined ? config.redCount:integer(data.redCount,'紅線人數',1,200);
+    // Score values only apply to classes closed and events created after the change.
+    const value=(key:'scorePresent'|'scoreLate'|'scoreAbsent'|'scoreShare'|'scoreEvent',label:string)=>data[key]===undefined ? config[key]:integer(data[key],label,-10_000,10_000);
+    const scores=[value('scorePresent','出席分數'),value('scoreLate','遲到分數'),value('scoreAbsent','缺席分數'),value('scoreShare','分享分數'),value('scoreEvent','活動分數')];
     await transact(db,[audit(db,actor,config.id,'settings.update',config.id,why),
-      q(db,'UPDATE cycles SET red_mode=?,red_score=?,yellow_score=?,cutoff_at=? WHERE id=?',redMode,redScore,yellowScore,cutoffAt,config.id)]);
+      q(db,`UPDATE cycles SET red_mode=?,red_score=?,yellow_score=?,cutoff_at=?,red_count=?,
+        score_present=?,score_late=?,score_absent=?,score_share=?,score_event=? WHERE id=?`,redMode,redScore,yellowScore,cutoffAt,redCount,...scores,config.id)]);
     return json({cycle:await cycle(db,config.id)});
   }
   if(path==='/api/admin/cycles' && request.method==='POST') {
@@ -23,7 +28,8 @@ export async function adminCycles(request:Request,env:Env,actor:Actor,path:strin
     await transact(db,[audit(db,actor,config.id,'cycle.archive',config.id,why,now),
       snapshot(db,{id:crypto.randomUUID(),cycleId:config.id,kind:'archive',actorId:actor.id,now,cutoff:now}),
       q(db,"UPDATE cycles SET status='archived',archived_at=? WHERE id=? AND status='active'",now,config.id),
-      q(db,"INSERT INTO cycles(id,name,status,created_at) VALUES(?,?,'active',?)",id,name,now)]);
+      q(db,`INSERT INTO cycles(id,name,status,created_at,red_count,score_present,score_late,score_absent,score_share,score_event)
+        SELECT ?,?,'active',?,red_count,score_present,score_late,score_absent,score_share,score_event FROM cycles WHERE id=?`,id,name,now,config.id)]);
     return json({cycle:await cycle(db,id)},201);
   }
   if(path==='/api/admin/settlement' && request.method==='POST') {
@@ -73,17 +79,18 @@ export async function adminCycles(request:Request,env:Env,actor:Actor,path:strin
     // Deliberate allowlist: never SELECT * from members or any authentication table.
     const results=await db.batch([
       q(db,'SELECT id,student_id,name,class_name,role,active,joined_at FROM members'),
-      q(db,'SELECT id,cycle_id,title,date,opens_at,late_at,closes_at,status,opened_at,closed_at FROM classes WHERE cycle_id=?',config.id),
+      q(db,'SELECT id,cycle_id,title,date,opens_at,late_at,closes_at,status,opened_at,closed_at,checkin_closed_at FROM classes WHERE cycle_id=?',config.id),
       q(db,'SELECT a.* FROM attendance a JOIN classes c ON c.id=a.class_id WHERE c.cycle_id=?',config.id),
       q(db,'SELECT * FROM events WHERE cycle_id=?',config.id),
       q(db,'SELECT p.* FROM participation p JOIN events e ON e.id=p.event_id WHERE e.cycle_id=?',config.id),
       q(db,'SELECT * FROM score_ledger WHERE cycle_id=? ORDER BY id',config.id),
       q(db,'SELECT * FROM ranking_snapshots WHERE cycle_id=? ORDER BY created_at',config.id),
       q(db,'SELECT d.* FROM settlement_decisions d JOIN ranking_snapshots s ON s.id=d.snapshot_id WHERE s.cycle_id=?',config.id),
+      q(db,'SELECT r.* FROM leave_requests r JOIN classes c ON c.id=r.class_id WHERE c.cycle_id=? ORDER BY r.created_at',config.id),
       q(db,'SELECT * FROM club_audit WHERE cycle_id=? ORDER BY created_at',config.id),
       q(db,'SELECT id,actor_id,target_id,action,created_at FROM account_audit WHERE created_at>=? AND created_at<=? ORDER BY created_at',config.createdAt,config.archivedAt ?? Date.now()),
     ]);
-    const names=['members','classes','attendance','events','participation','ledger','snapshots','decisions','audit','accountAudit'];
+    const names=['members','classes','attendance','events','participation','ledger','snapshots','decisions','leaveRequests','audit','accountAudit'];
     const exported=Object.fromEntries(results.map((result,index)=>[names[index],
       names[index]==='attendance' ? (result.results as Row[]).map(attendanceView) :
       names[index]==='participation' ? (result.results as Row[]).map(participationView):result.results]));
