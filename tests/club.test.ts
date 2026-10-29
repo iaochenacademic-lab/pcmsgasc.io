@@ -396,6 +396,133 @@ describe('club rules through HTTP and actual SQLite', () => {
     expect((await call(path,'PATCH',{open:true,reason:'重新開放'})).status).toBe(409);
     expect((await call('/api/classes','GET',undefined,student)).data.classes[0]).toHaveProperty('checkinClosedAt');
   });
+  it('lets students request leave and applies approved leave to attendance and scores', async () => {
+    const id = await createClass(); expect((await close(id)).status).toBe(200);
+    expect((await call('/api/ledger','GET',undefined,student)).data.score).toBe(-200);
+    const made = await call<{request:{id:string;status:string}}>('/api/leave','POST',{classId:id,kind:'sick_leave',reason:'發燒就醫'},student);
+    expect(made.status).toBe(201); expect(made.data.request.status).toBe('pending');
+    expect((await call('/api/leave','POST',{classId:id,kind:'sick_leave',reason:'重複申請'},student)).status).toBe(409);
+    const listed = (await call<{requests:object[]}>('/api/admin/leave')).data.requests;
+    expect(listed).toMatchObject([{id:made.data.request.id,status:'pending',memberName:'測試a',classTitle:'議題討論'}]);
+    expect((await call(`/api/admin/leave/${made.data.request.id}/decision`,'POST',{approve:true})).status).toBe(200);
+    expect(fixture.sqlite.prepare("SELECT status,note FROM attendance WHERE class_id=? AND member_id='a'").get(id)).toEqual({status:'sick_leave',note:'發燒就醫'});
+    expect((await call('/api/ledger','GET',undefined,student)).data.score).toBe(0);
+    expect((await call<{requests:{status:string}[]}>('/api/leave','GET',undefined,student)).data.requests[0].status).toBe('approved');
+    expect((await call(`/api/admin/leave/${made.data.request.id}/decision`,'POST',{approve:true})).status).toBe(409);
+    expect(fixture.sqlite.prepare("SELECT COUNT(*) n FROM club_audit WHERE action='leave.approve'").get()!.n).toBe(1);
+  });
+  it('requires a note to reject, limits withdrawal to the owner and validates the class', async () => {
+    const other = fixture.member('b'); const late = fixture.member('late',{joinedAt:Date.parse('2026-10-20T00:00:00+08:00')});
+    const id = await createClass(false);
+    const first = (await call<{request:{id:string}}>('/api/leave','POST',{classId:id,kind:'personal_leave',reason:'家中有事'},student)).data.request.id;
+    expect((await call(`/api/admin/leave/${first}/decision`,'POST',{approve:false})).status).toBe(400);
+    expect((await call(`/api/admin/leave/${first}/decision`,'POST',{approve:false,note:'請附證明'})).status).toBe(200);
+    expect((await call<{requests:object[]}>('/api/leave','GET',undefined,student)).data.requests[0]).toMatchObject({status:'rejected',decisionNote:'請附證明'});
+    const second = (await call<{request:{id:string}}>('/api/leave','POST',{classId:id,kind:'personal_leave',reason:'補交證明'},student)).data.request.id;
+    expect((await call(`/api/leave/${second}/withdraw`,'POST',{},other)).status).toBe(404);
+    expect((await call(`/api/leave/${second}/withdraw`,'POST',{},student)).status).toBe(200);
+    expect((await call(`/api/admin/leave/${second}/decision`,'POST',{approve:true})).status).toBe(409);
+    expect((await call<{requests:object[]}>('/api/leave','GET',undefined,other)).data.requests).toEqual([]);
+    expect((await call('/api/leave','POST',{classId:id,kind:'present',reason:'不是假別'},student)).status).toBe(400);
+    expect((await call('/api/leave','POST',{classId:id,kind:'sick_leave',reason:'晚於課次加入'},late)).status).toBe(409);
+    await call(`/api/admin/classes/${id}`,'PATCH',{status:'cancelled',reason:'課程取消'});
+    expect((await call('/api/leave','POST',{classId:id,kind:'sick_leave',reason:'取消後申請'},other)).status).toBe(409);
+    expect((await call('/api/admin/leave','GET',undefined,student)).status).toBe(403);
+    expect(fixture.sqlite.prepare('SELECT COUNT(*) n FROM attendance').get()!.n).toBe(0);
+  });
+  it('lets admins record leave directly and refuses when a request is waiting', async () => {
+    fixture.member('b'); const id = await createClass();
+    const made = await call<{request:object}>('/api/admin/leave','POST',{memberId:'b',classId:id,kind:'official_leave',note:'校隊比賽'});
+    expect(made.status).toBe(201); expect(made.data.request).toMatchObject({status:'approved',source:'admin'});
+    expect(fixture.sqlite.prepare("SELECT status,note FROM attendance WHERE class_id=? AND member_id='b'").get(id)).toEqual({status:'official_leave',note:'校隊比賽'});
+    expect((await call<{requests:object[]}>('/api/leave','GET',undefined,{...student,id:'b'})).data.requests).toMatchObject([{status:'approved',kind:'official_leave'}]);
+    await call('/api/leave','POST',{classId:id,kind:'sick_leave',reason:'身體不適'},student);
+    expect((await call('/api/admin/leave','POST',{memberId:'a',classId:id,kind:'sick_leave'})).status).toBe(409);
+    expect(fixture.sqlite.prepare("SELECT COUNT(*) n FROM club_audit WHERE action='leave.create'").get()!.n).toBe(1);
+  });
+  it('shows students only their own pending flag', async () => {
+    fixture.member('b'); const c = fixture.member('c');
+    await adjustment('a',-100); await adjustment('b',-100); await adjustment('c',100);
+    const flags = (rows: {memberId:string;pending:boolean}[]) => rows.filter(row => row.pending).map(row => row.memberId).sort();
+    expect(flags((await call('/api/rankings')).data.rows)).toEqual(['a','b']);
+    expect(flags((await call('/api/rankings','GET',undefined,student)).data.rows)).toEqual(['a']);
+    expect(flags((await call<{rankings:{rows:{memberId:string;pending:boolean}[]}}>('/api/overview','GET',undefined,c)).data.rankings.rows)).toEqual([]);
+  });
+  it('uses the bottom N members for the automatic red line without splitting ties', async () => {
+    fixture.member('b'); fixture.member('c'); fixture.member('d'); fixture.member('e');
+    await adjustment('a',100); await adjustment('b',50); await adjustment('c',50); await adjustment('e',-50);
+    const pending = async () => (await call('/api/rankings')).data.rows.filter(row => row.pending).map(row => row.memberId).sort();
+    const setCount = (redCount: unknown) => call('/api/admin/settings','PATCH',{redCount,reason:'調整紅線人數'});
+    expect(await pending()).toEqual(['d','e']);
+    expect((await setCount(3)).status).toBe(200);
+    expect(await pending()).toEqual(['b','c','d','e']);
+    await setCount(1); expect(await pending()).toEqual(['e']);
+    await setCount(10); expect(await pending()).toEqual(['a','b','c','d','e']);
+    expect((await setCount(0)).status).toBe(400);
+    expect((await setCount(1.5)).status).toBe(400);
+    await setCount(3);
+    const id = await createClass(); await close(id);
+    const snapshotId = (await call('/api/rankings')).data.snapshots[0].id;
+    expect((await call(`/api/rankings?snapshotId=${snapshotId}`)).data.rows.filter(row => row.pending).map(row => row.memberId).sort()).toEqual(['b','c','d','e']);
+  });
+  it('freezes score values when a class closes and applies new values only afterwards', async () => {
+    fixture.member('b');
+    const before = (await call('/api/admin/events','POST',{title:'舊講座',kind:'lecture',startsAt:Date.now()})).data.event;
+    const first = await createClass();
+    await call(`/api/admin/classes/${first}/attendance`,'PUT',{memberId:'a',status:'present',shared:true,reason:'出席分享'});
+    await close(first);
+    expect((await call('/api/ledger','GET',undefined,student)).data.score).toBe(250);
+    const changed = await call<{cycle:object}>('/api/admin/settings','PATCH',{scorePresent:100,scoreLate:-50,scoreAbsent:-300,scoreShare:150,scoreEvent:80,reason:'新學期計分'});
+    expect(changed.data.cycle).toMatchObject({scorePresent:100,scoreLate:-50,scoreAbsent:-300,scoreShare:150,scoreEvent:80});
+    await call(`/api/admin/classes/${first}/attendance`,'PUT',{memberId:'a',status:'present',shared:false,reason:'更正分享'});
+    expect((await call('/api/ledger','GET',undefined,student)).data.score).toBe(50);
+    const second = await createClass();
+    await call(`/api/admin/classes/${second}/attendance`,'PUT',{memberId:'a',status:'present',shared:true,reason:'出席分享'});
+    await close(second);
+    expect((await call('/api/ledger','GET',undefined,student)).data.score).toBe(300);
+    expect((await call('/api/ledger','GET',undefined,{...student,id:'b'})).data.score).toBe(-500);
+    const after = (await call('/api/admin/events','POST',{title:'新講座',kind:'lecture',startsAt:Date.now()})).data.event;
+    expect([before.points,after.points]).toEqual([50,80]);
+    await call(`/api/admin/events/${before.id}/participants`,'PUT',{memberId:'a',active:true,reason:'出席'});
+    await call(`/api/admin/events/${after.id}/participants`,'PUT',{memberIds:['a'],reason:'出席'});
+    expect((await call('/api/ledger','GET',undefined,student)).data.score).toBe(430);
+    expect((await call('/api/admin/settings','PATCH',{scorePresent:0.5,reason:'錯誤分值'})).status).toBe(400);
+  });
+  it('carries red line and score settings into a new cycle', async () => {
+    await call('/api/admin/settings','PATCH',{redCount:3,scorePresent:100,scoreEvent:80,reason:'本期設定'});
+    const created = await call<{cycle:object}>('/api/admin/cycles','POST',{name:'下一期',reason:'學期結束'});
+    expect(created.status).toBe(201);
+    expect(created.data.cycle).toMatchObject({status:'active',redCount:3,scorePresent:100,scoreLate:-100,scoreAbsent:-200,scoreShare:200,scoreEvent:80});
+  });
+  it('exports Excel-ready CSV for rankings, attendance and the score ledger', async () => {
+    fixture.member('b',{name:'=HYPERLINK("x")'});
+    const id = await createClass();
+    await call(`/api/admin/classes/${id}/attendance`,'PUT',{memberId:'a',status:'present',shared:true,note:'+1 分享, "引號"',reason:'出席'});
+    await close(id); await call('/api/admin/settings','PATCH',{redCount:1,reason:'只看末位'});
+    async function csv(table: string, actor = admin) {
+      const request = new Request(`https://club.test/api/admin/export.csv?table=${table}`);
+      let response: Response | null;
+      try { response = await handleBusiness(request, fixture.env, actor, '/api/admin/export.csv'); }
+      catch (error) { if (!(error instanceof Response)) throw error; response = error; }
+      const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(await response!.arrayBuffer());
+      return { status: response!.status, type: response!.headers.get('content-type'), text };
+    }
+    const ranks = await csv('rankings');
+    expect(ranks.type).toBe('text/csv; charset=utf-8');
+    expect(ranks.text.startsWith('﻿名次,姓名,學號,班別,積分,待定,免面試達標\r\n')).toBe(true);
+    expect(ranks.text).toContain('1,測試a,test-a,測試班,2.5,,\r\n');
+    expect(ranks.text).toContain(`2,"'=HYPERLINK(""x"")",test-b,測試班,-2,是,\r\n`);
+    const attendance = await csv('attendance');
+    expect(attendance.text.split('\r\n')[0]).toBe('﻿日期,課次,課次狀態,姓名,學號,班別,出勤,分享,簽到時間,備註');
+    expect(attendance.text).toContain(`2026-10-16,議題討論,已結課,測試a,test-a,測試班,出席,是,,"'+1 分享, ""引號"""\r\n`);
+    expect(attendance.text).toContain('測試班,缺席,否,,\r\n');
+    const ledger = await csv('ledger');
+    expect(ledger.text.split('\r\n')[0]).toBe('﻿時間,姓名,學號,班別,類別,說明,分數變動');
+    expect(ledger.text).toMatch(/2026-10-16 12:50,測試a,test-a,測試班,課堂積分,核對完成,2\.5\r\n/);
+    expect(ledger.text).toMatch(/,-2\r\n/);
+    expect((await csv('members')).status).toBe(400);
+    expect((await csv('rankings', student)).status).toBe(403);
+  });
   it('rejects invalid bulk attendance without writing anything', async () => {
     const late = fixture.member('late',{joinedAt:Date.parse('2026-10-20T00:00:00+08:00')}); const id = await createClass();
     const path = `/api/admin/classes/${id}/attendance`;

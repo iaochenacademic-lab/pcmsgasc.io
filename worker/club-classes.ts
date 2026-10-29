@@ -21,7 +21,7 @@ function times(data:Row) {
   if(!(opensAt<lateAt && lateAt<closesAt)) fail('簽到開始、遲到、結束時間必須依序排列。');
   return {date,opensAt,lateAt,closesAt};
 }
-async function getClass(db:Db,id:string) {
+export async function getClass(db:Db,id:string) {
   const value=await one<ClubClass>(db,'SELECT * FROM classes WHERE id=?',id);
   if(!value) fail('找不到課次。',404); return value;
 }
@@ -34,10 +34,13 @@ export async function listClasses(db:Db,actor:Actor,cycleId:string,admin=false) 
   return classes.map(item=>({...item,closeToken:undefined,myAttendance:own.find(row=>row.classId===item.id) || null,
     ...(admin ? {attendance:records.filter(row=>row.classId===item.id).map(attendanceView)}: {})}));
 }
-function publishClass(db:Db,id:string,actor:Actor,why:string,now:number,token?:string) {
+// Uses the score values frozen on the class when it closed; NULL means it closed
+// before per-cycle values existed, so the original fixed values apply.
+export function publishClass(db:Db,id:string,actor:Actor,why:string,now:number,token?:string) {
   return q(db,`INSERT INTO score_sources(cycle_id,member_id,source_type,source_id,amount,reason,actor_id,updated_at)
     SELECT c.cycle_id,a.member_id,'class',c.id,
-      CASE a.status WHEN 'present' THEN 50 WHEN 'late' THEN -100 WHEN 'absent' THEN -200 ELSE 0 END + a.shared*200,?,?,?
+      CASE a.status WHEN 'present' THEN COALESCE(c.score_present,50) WHEN 'late' THEN COALESCE(c.score_late,-100)
+        WHEN 'absent' THEN COALESCE(c.score_absent,-200) ELSE 0 END + a.shared*COALESCE(c.score_share,200),?,?,?
     FROM attendance a JOIN classes c ON c.id=a.class_id WHERE c.id=? AND c.status='closed' ${token ? 'AND c.close_token=?':''}
     ON CONFLICT(cycle_id,member_id,source_type,source_id) DO UPDATE SET amount=excluded.amount,reason=excluded.reason,actor_id=excluded.actor_id,updated_at=excluded.updated_at`,
     why,actor.id,now,id,...(token ? [token]:[]));
@@ -174,7 +177,8 @@ export async function adminClasses(request:Request,env:Env,actor:Actor,path:stri
     if(item.status!=='open' || item.openedAt===null) fail('只有已開啟的課次可以結課。',409);
     const snapshotId=crypto.randomUUID();
     await transact(db,[audit(db,actor,item.cycleId,'class.close',item.id,why,now),
-      q(db,"UPDATE classes SET status='closed',closed_at=?,close_token=? WHERE id=? AND status='open'",now,snapshotId,item.id),
+      q(db,`UPDATE classes SET status='closed',closed_at=?,close_token=?,score_present=cy.score_present,score_late=cy.score_late,
+        score_absent=cy.score_absent,score_share=cy.score_share FROM cycles cy WHERE classes.id=? AND classes.status='open' AND cy.id=classes.cycle_id`,now,snapshotId,item.id),
       q(db,`INSERT INTO attendance(class_id,member_id,status,shared,note,checked_in_at,updated_at,actor_id,reason)
         SELECT c.id,m.id,'absent',0,'',NULL,?,?,? FROM classes c JOIN members m ON m.role='member' AND m.active=1 AND m.joined_at<=c.late_at
         WHERE c.id=? AND c.close_token=? ON CONFLICT(class_id,member_id) DO NOTHING`,now,actor.id,why,item.id,snapshotId),

@@ -15,7 +15,10 @@
 - `GET /api/events/:id` → `{event}`；myParticipation 僅本人 `{points,result,note,active}`。
 - `POST /api/checkin` `{classId,code}` → `{attendance,alreadyCheckedIn}`。code 必須為 6 位數字；每課一組，開啟簽到後整個窗口內有效。只有已開啟且窗口內可簽到，12:55（可修改）起遲到。重複簽到不覆寫既有狀態。每位學生每課最多 10 次提交（含成功），不隨時間重置，超出回傳 429，需由管理員補登。
 - `GET /api/ledger` → `{ledger:[{id,cycleId,memberId,sourceType,sourceId,delta,reason,createdAt}],score}`。學生只取得本人，管理員可加 `memberId` 查指定學生。
-- `GET /api/rankings` → `{cycle,rows:[{memberId,name,className,score,rank,tieGroup,pending,qualified}],redScore,yellowScore,hasScores,overlap,snapshots:[{id,kind,classId,createdAt,cutoffAt}]}`。無計分不提示待定；同分同名次。`?snapshotId=...` 讀固定快照，固定快照不隨停用改變。公開欄位不含學號、請假、備註。
+- `GET /api/rankings` → `{cycle,rows:[{memberId,name,className,score,rank,tieGroup,pending,qualified}],redScore,yellowScore,hasScores,overlap,snapshots:[{id,kind,classId,createdAt,cutoffAt}]}`。無計分不提示待定；同分同名次。`?snapshotId=...` 讀固定快照，固定快照不隨停用改變。公開欄位不含學號、請假、備註。 學生呼叫時，只有本人那一列保留 `pending`，其他人的 `pending` 一律為 false（overview 內的 rankings 亦同）；管理員看到完整資料。
+- `GET /api/leave` → `{requests:[{id,classId,classTitle,classDate,classStatus,kind,reason,status,source,createdAt,decidedAt,decisionNote,...}]}`。僅學生本人，當期。
+- `POST /api/leave` `{classId,kind,reason}` → 201 `{request}`。kind 為 official_leave／sick_leave／personal_leave。課次需未取消、週期未封存、學生加入不晚於該課；同一課已有待審申請回 409。
+- `POST /api/leave/:id/withdraw` → `{ok}`。只能撤回本人待審申請，否則 404。
 
 ## 管理課次
 
@@ -37,16 +40,24 @@
 - 批量：同一路徑改傳 `{memberIds:string[],points?:number,reason}` → `{added}`。只新增未登記或已撤銷的成員，已登記者的分數、成績與備註不變，也不寫審計；比賽用統一 points，其他類別固定 0.5 分。活動已取消回傳 409。
 - `POST /api/admin/adjustments` `{memberId,points,reason,idempotencyKey}` → `{ok:true}`。points為有正負的整數分，idempotencyKey 使用 `crypto.randomUUID()`，網路重送沿用同一值。
 
+## 管理請假
+
+- `GET /api/admin/leave?cycleId=` → `{requests}`（含學生姓名與班別，待審在前）。
+- `POST /api/admin/leave/:id/decision` `{approve:boolean,note?}` → `{request}`。退回必須填 note（學生可見）。核准在同一交易內寫入該課出勤（狀態為假別、備註為請假理由），已結課則重發分數與快照；審計 `leave.approve`／`leave.reject`。非待審回 409。
+- `POST /api/admin/leave` `{memberId,classId,kind,note?}` → 201 `{request}`。管理員直接登記，建立 source=admin、已核准的紀錄並寫入出勤；審計 `leave.create`。該生該課已有待審申請時回 409，請改為審核該申請。需 migration 0004。
+
 ## 設定、結算、封存與審計
 
 - `GET /api/admin/settings` → `{cycle}`。
 - `PATCH /api/admin/settings` `{redMode?:'automatic'|'manual',redScore?:number|null,yellowScore?:number|null,cutoffAt?:number|null,reason}` → `{cycle}`。手動紅線須填分數。重疊仍可保存但禁止結算，畫面提示修正。
+- 同一 PATCH 另可傳 `redCount`（1–200，自動紅線取倒數第 N 人分數，同分整組納入）及 `scorePresent`、`scoreLate`、`scoreAbsent`、`scoreShare`、`scoreEvent`（百分之一分整數，±10000 內）。課次結課時把出席／遲到／缺席／分享分值複製到該課，之後的更正與設定變更都用該課固定值；非比賽活動於建立時取 scoreEvent 存入 events.points。新週期沿用上一期的 redCount 與分值。需 migration 0005。
 - `POST /api/admin/settlement` `{reason}` → `{snapshotId}`。必須設定已到達的截止時間，按截止時間已發布的流水計分，重複相同截止不另建快照；紅黃重疊或無計分時拒絕。
 - `GET /api/admin/settlement` → `{snapshots:[{id,cycleId,createdAt,cutoffAt,redScore,yellowScore,rows:[ranking row + decision?:'retain'|'eliminate',decisionReason?:string,decidedAt?:number]}]}`。
 - `POST /api/admin/settlement/:snapshotId/decisions` `{memberId,decision:'retain'|'eliminate',reason}` → `{ok:true}`。僅固定待定群組逐人決定，決定一次；eliminate停用並撤銷session，不連鎖下一人。
 - `POST /api/admin/cycles` `{name,reason}` → `{cycle}`。原子封存當期及新建週期，全部分數重新由0開始。
 - `GET /api/admin/audit` → `{audit:[{id,actorId,action,targetId,reason,createdAt}]}`，最近500筆，合併週期業務與該週期時間內的帳號操作；帳號操作action前綴為`account.`。
 - `GET /api/admin/export?cycleId=...` → JSON `{exportedAt,cycle,members,classes,attendance,events,participation,ledger,snapshots,decisions,audit,accountAudit}`，提供附件下載。成員使用明確白名單欄位，無密碼/hash/session等認證秘密。帳號操作類別（如重設密碼）僅是事件名稱，不含憑證。匯出含請假備註，僅管理員可用。匯出資料列保留資料庫snake_case欄名。
+- `GET /api/admin/export.csv?table=rankings|attendance|ledger&cycleId=` → `text/csv; charset=utf-8`，UTF-8 BOM、CRLF，Excel 可直接開啟。欄位：排行榜（名次、姓名、學號、班別、積分、待定、免面試達標）、出勤明細（日期、課次、課次狀態、姓名、學號、班別、出勤、分享、簽到時間、備註）、積分流水（時間、姓名、學號、班別、類別、說明、分數變動）。文字欄位若以 = + - @ 或定位字元開頭會加前置單引號，防止 Excel 公式注入；數字欄位保持數字。其他 table 回 400。
 
 ## 原子性與截止解釋
 

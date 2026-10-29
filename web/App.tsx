@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Archive, CalendarDays, ClipboardCheck, FileText, Gavel, House, Info, LayoutDashboard, LogOut, Menu, PenLine, ScrollText, Settings as SettingsIcon, SlidersHorizontal, Trophy, UserRound, Users, type LucideIcon } from 'lucide-react';
+import { Archive, CalendarDays, CalendarOff, ClipboardCheck, FileText, Gavel, House, Info, LayoutDashboard, LogOut, Menu, PenLine, ScrollText, Settings as SettingsIcon, SlidersHorizontal, Trophy, UserRound, Users, type LucideIcon } from 'lucide-react';
 import { ApiError, api, errorMessage } from './api';
 import type { Actor } from './types';
 import { Account, Login } from './auth';
 import { DataState, Globe, Modal, ToastContext } from './ui';
 import { Checkin, Credits, Dashboard, Events, RankingsPage, Records } from './student';
 import { Members } from './members';
+import { LeaveAdmin, MyLeave } from './leave';
 import { ClassesAdmin } from './classes';
 import { EventsAdmin } from './events';
 import { Adjustments, Archives, AuditPage, Decisions, Settings } from './governance';
@@ -13,14 +14,14 @@ import { Adjustments, Archives, AuditPage, Decisions, Settings } from './governa
 interface NavItem { id: string; label: string; short: string; icon: LucideIcon }
 interface NavGroup { label: string; items: NavItem[] }
 const studentNav: NavGroup[] = [
-  { label: '', items: [{ id: 'dashboard', label: '本期首頁', short: '首頁', icon: House }, { id: 'checkin', label: '課堂簽到', short: '簽到', icon: ClipboardCheck }, { id: 'events', label: '活動一覽', short: '活動', icon: CalendarDays }, { id: 'record', label: '我的紀錄', short: '紀錄', icon: FileText }, { id: 'leaderboard', label: '積分排行榜', short: '排行', icon: Trophy }] },
+  { label: '', items: [{ id: 'dashboard', label: '本期首頁', short: '首頁', icon: House }, { id: 'checkin', label: '課堂簽到', short: '簽到', icon: ClipboardCheck }, { id: 'events', label: '活動一覽', short: '活動', icon: CalendarDays }, { id: 'record', label: '我的紀錄', short: '紀錄', icon: FileText }, { id: 'leaderboard', label: '積分排行榜', short: '排行', icon: Trophy }, { id: 'leave', label: '請假申請', short: '請假', icon: CalendarOff }] },
   { label: '其他', items: [{ id: 'account', label: '帳號設定', short: '帳號', icon: SettingsIcon }, { id: 'credits', label: '開發致謝', short: '致謝', icon: Info }] },
 ];
 const adminNav: NavGroup[] = [
-  { label: '日常', items: [{ id: 'dashboard', label: '管理總覽', short: '總覽', icon: LayoutDashboard }, { id: 'members', label: '成員管理', short: '成員', icon: Users }, { id: 'sessions', label: '課次與點名', short: '點名', icon: ClipboardCheck }, { id: 'activities', label: '活動管理', short: '活動', icon: CalendarDays }] },
+  { label: '日常', items: [{ id: 'dashboard', label: '管理總覽', short: '總覽', icon: LayoutDashboard }, { id: 'members', label: '成員管理', short: '成員', icon: Users }, { id: 'sessions', label: '課次與點名', short: '點名', icon: ClipboardCheck }, { id: 'activities', label: '活動管理', short: '活動', icon: CalendarDays }, { id: 'leave', label: '請假管理', short: '請假', icon: CalendarOff }] },
   { label: '積分', items: [{ id: 'leaderboard', label: '積分排行榜', short: '排行', icon: Trophy }, { id: 'record', label: '成員積分紀錄', short: '紀錄', icon: FileText }, { id: 'adjustments', label: '分數修正', short: '修正', icon: PenLine }] },
-  { label: '學期結算', items: [{ id: 'thresholds', label: '門檻設定', short: '門檻', icon: SlidersHorizontal }, { id: 'decisions', label: '截止待審', short: '待審', icon: Gavel }, { id: 'archives', label: '封存與新期', short: '封存', icon: Archive }] },
-  { label: '系統', items: [{ id: 'logs', label: '操作紀錄', short: '紀錄', icon: ScrollText }, { id: 'account', label: '帳號設定', short: '帳號', icon: SettingsIcon }, { id: 'credits', label: '開發致謝', short: '致謝', icon: Info }] },
+  { label: '學期結算', items: [{ id: 'thresholds', label: '門檻與計分', short: '門檻', icon: SlidersHorizontal }, { id: 'decisions', label: '截止待審', short: '待審', icon: Gavel }, { id: 'archives', label: '封存與新期', short: '封存', icon: Archive }] },
+  { label: '系統', items: [{ id: 'logs', label: '操作紀錄與匯出', short: '匯出', icon: ScrollText }, { id: 'account', label: '帳號設定', short: '帳號', icon: SettingsIcon }, { id: 'credits', label: '開發致謝', short: '致謝', icon: Info }] },
 ];
 function NavGroups({ groups, active, navigate }: { groups: NavGroup[]; active: string; navigate: (id: string) => void }) {
   return <>{groups.map(group => <div className="nav-group" key={group.label}>{group.label && <span className="nav-group-label">{group.label}</span>}{group.items.map(({ id, label, icon: Icon }) => <button key={id} className="nav-button" onClick={() => navigate(id)} aria-current={active === id ? 'page' : undefined}><Icon/>{label}</button>)}</div>)}</>;
@@ -59,6 +60,7 @@ export function App() {
       case 'decisions': return <Decisions/>;
       case 'archives': return <Archives navigate={navigate}/>;
       case 'logs': return <AuditPage/>;
+      case 'leave': return user.role === 'admin' ? <LeaveAdmin/> : <MyLeave/>;
       default: return <Credits/>;
     }
   }

@@ -34,7 +34,13 @@
 
 第 1–3 批已提交於本機分支 `claude/design-review-batches-1-3`（3330913），尚未推送。
 
-2026-10-29 第 4 批課次管理（未提交）：新增 migration `0003_checkin_closed.sql`，已以 `wrangler d1 migrations apply club-db --local --persist-to .wrangler/acceptance` 套用到本機驗收資料庫；遠端尚未套用，部署前須先跑遠端 migration。先新增 2 項測試並確認失敗，實作後 club 測試 35/35。之後依序 `npm test`（7 檔 73/73）、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check` 全部通過。內建瀏覽器實測：管理員首頁與課次頁提醒「有 1 節課需要處理」（10-19 國際新聞研習已過期未開啟）；總表列出全部課次與已登記人數；虛構課次「提前結束簽到測試（虛構）」提前結束簽到後，學生簽到頁不再列出、強制送出回 409「老師已結束本課簽到」，重新開放後學生可見，審計各記一筆；該課次隨後取消。同時更正 OPERATIONS.md 中第 2 批遺留的 QR／30 秒說明。
+2026-10-29 第 4 批課次管理（未提交）：新增 migration `0003_checkin_closed.sql`，已以 `wrangler d1 migrations apply club-db --local --persist-to .wrangler/acceptance` 套用到本機驗收資料庫；遠端尚未套用，部署前須先跑遠端 migration。先新增 2 項測試並確認失敗，實作後 club 測試 35/35。之後依序 `npm test`（7 檔 73/73）、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check` 全部通過。內建瀏覽器實測：管理員首頁與課次頁提醒「有 1 節課需要處理」（10-19 國際新聞研習已過期未開啟）；總表列出全部課次與已登記人數；虛構課次「提前結束簽到測試（虛構）」提前結束簽到後，學生簽到頁不再列出、強制送出回 409「老師已結束本課簽到」，重新開放後學生可見，審計各記一筆；該課次隨後取消。同時更正 OPERATIONS.md 中第 2 批遺留的 QR／30 秒說明。第 4 批已提交（3132f60）。
+
+2026-10-29 第 5 批請假與隱私（未提交）：新增 migration `0004_leave_requests.sql`，已套用到本機驗收資料庫，遠端尚未套用。先新增 4 項測試並確認失敗，實作後 club 測試 39/39。之後依序 `npm test`（7 檔 77/77，約 112 秒，主要耗時仍為既有 bcrypt 並發登入測試）、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check` 全部通過。內建瀏覽器實測（虛構課次「請假流程測試（虛構）」，測後取消）：qa-004 在學生頁送出病假申請；管理員總覽提示「有 1 筆請假申請待審核」，於請假管理一鍵核准，名冊記為病假；以「登記請假」替 qa-005 登記公假；qa-004 再申請事假，管理員填說明退回，學生端看到退回說明；qa-005 只看到自己的紀錄，課次資料不含他人請假理由。排行榜待定標記的隱私由單元測試驗證（本機資料目前無分數，無待定可看）。
+
+2026-10-29 第 6 批規則設定（未提交，第 5 批亦未提交）：新增 migration `0005_cycle_rules.sql`。首版以「建新表再改名」重建 events，本機 D1 回報 internal error 並整批回滾；在暫存複本逐句重現，確認 DROP 後改名無法清除延後外鍵計數，改為「備份表 → 刪除 → 以原名建表 → 插回資料」，複本與本機驗收資料庫皆套用成功，`PRAGMA foreign_key_check` 無結果，events 3 筆、participation 9 筆保留。套用前的本機資料庫備份存於工作階段暫存目錄。先新增 3 項測試並確認失敗，實作後 club 測試 42/42。之後依序 `npm test`（7 檔 80/80）、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check` 全部通過。內建瀏覽器實測：門檻與計分頁顯示 N 與五項分值，改 N=3、出席 1 分後儲存，API 回傳一致；學生簽到須知顯示「出席 +1 分」。測試後已把設定改回 N=2、出席 0.5，並取消暫時課次「計分顯示測試（虛構）」。遠端 D1 尚未套用 0003–0005。
+
+2026-10-29 第 7 批 CSV 匯出（未提交）：先新增 1 項測試並確認失敗（另修正測試以保留 BOM 解碼：`Response.text()` 會去除 BOM），實作後 club 測試 43/43。之後依序 `npm test`（7 檔 81/81）、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check` 全部通過。內建瀏覽器以管理員身份在頁面內請求三種 CSV：皆 200、`text/csv; charset=utf-8`、開頭為 UTF-8 BOM，分別 99、6、16 筆資料列；頁面顯示三個下載按鈕與 JSON 備份。未在內建瀏覽器實際點擊下載以免在使用者電腦存檔，也未用 Excel 實際開啟。設計評估七批至此全部完成，第 5–7 批尚未提交。
 
 ## 尚未完成的正式上線
 

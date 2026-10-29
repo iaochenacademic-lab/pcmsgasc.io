@@ -96,7 +96,8 @@ export function snapshot(db:Db,args:{id:string;cycleId:string;classId?:string;ki
     source_states AS (${sourceStates}),
     limits AS (
       SELECT CASE WHEN red_mode='manual' THEN red_score ELSE
-        COALESCE((SELECT score FROM totals ORDER BY score ASC,member_id LIMIT 1 OFFSET 1),(SELECT MIN(score) FROM totals)) END red,
+        COALESCE((SELECT score FROM (SELECT score,ROW_NUMBER() OVER(ORDER BY score ASC,member_id) n FROM totals) WHERE n=cycles.red_count),
+          (SELECT MAX(score) FROM totals)) END red,
         yellow_score yellow,
         EXISTS(SELECT 1 FROM source_states WHERE version=1 AND effective=1 AND member_id IN(SELECT member_id FROM totals)) has
       FROM cycles WHERE id=?
@@ -114,7 +115,7 @@ export function snapshot(db:Db,args:{id:string;cycleId:string;classId?:string;ki
 export function rank(rows:{memberId:string;name:string;className:string;score:number}[],config:Cycle,hasScores:boolean) {
   const sorted=[...rows].sort((a,b)=>b.score-a.score || a.memberId.localeCompare(b.memberId));
   const bottom=[...sorted].reverse();
-  const redScore=config.redMode==='manual' ? config.redScore : bottom[Math.min(1,bottom.length-1)]?.score ?? null;
+  const redScore=config.redMode==='manual' ? config.redScore : bottom[Math.min(config.redCount-1,bottom.length-1)]?.score ?? null;
   const overlap=redScore!==null && config.yellowScore!==null && redScore>=config.yellowScore;
   let rankNumber=0;
   const ranked:RankRow[]=sorted.map((row,index)=>{

@@ -43,7 +43,7 @@ export async function adminEvents(request:Request,env:Env,actor:Actor,path:strin
     const title=string(data.title,'活動名稱'),description=string(data.description,'活動說明',10000,true),location=string(data.location,'地點',500,true);
     const startsAt=timestamp(data.startsAt,'開始時間'),endsAt=data.endsAt==null ? null:timestamp(data.endsAt,'結束時間');
     if(endsAt!==null && endsAt<startsAt) fail('結束時間不可早於開始時間。');
-    const points=kind==='competition' ? integer(data.points ?? 0,'比賽分數') : 50;
+    const points=kind==='competition' ? integer(data.points ?? 0,'比賽分數') : config.scoreEvent;
     await transact(db,[audit(db,actor,config.id,'event.create',id,'發布活動'),
       q(db,'INSERT INTO events(id,cycle_id,title,kind,description,location,starts_at,ends_at,points) VALUES(?,?,?,?,?,?,?,?,?)',id,config.id,title,kind,description,location,startsAt,endsAt,points)]);
     return json({event:await getEvent(db,id)},201);
@@ -77,7 +77,7 @@ export async function adminEvents(request:Request,env:Env,actor:Actor,path:strin
     // Bulk mode only adds new or revoked members; existing active entries keep their points and results.
     if(item.status!=='published') fail('活動已取消。',409);
     const members=await studentMembers(db,data.memberIds);
-    const points=item.kind==='competition' ? integer(data.points ?? item.points,'比賽分數'):50;
+    const points=item.kind==='competition' ? integer(data.points ?? item.points,'比賽分數'):item.points;
     const results=await transact(db,members.flatMap(member=>{
       const changeId=crypto.randomUUID();
       return [q(db,`INSERT INTO participation(event_id,member_id,points,result,note,active,updated_at,actor_id,reason)
@@ -93,7 +93,7 @@ export async function adminEvents(request:Request,env:Env,actor:Actor,path:strin
     if(item.status!=='published') fail('活動已取消。',409);
     const member=await studentMember(db,data.memberId);
     if(typeof data.active!=='boolean') fail('請指定是否參與。');
-    const points=item.kind==='competition' ? integer(data.points ?? item.points,'比賽分數'):50;
+    const points=item.kind==='competition' ? integer(data.points ?? item.points,'比賽分數'):item.points;
     const result=string(data.result,'成績',1000,true),note=string(data.note,'備註',2000,true);
     const changeId=crypto.randomUUID();
     const results=await transact(db,[q(db,`INSERT INTO participation(event_id,member_id,points,result,note,active,updated_at,actor_id,reason)

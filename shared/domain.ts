@@ -2,7 +2,8 @@ export type AttendanceStatus = 'present' | 'late' | 'absent' | 'official_leave' 
 export type EventKind = 'lecture' | 'visit' | 'spectating' | 'competition';
 export interface Cycle {
   id: string; name: string; status: 'active' | 'archived'; createdAt: number; archivedAt: number | null;
-  redMode: 'automatic' | 'manual'; redScore: number | null; yellowScore: number | null; cutoffAt: number | null;
+  redMode: 'automatic' | 'manual'; redScore: number | null; yellowScore: number | null; cutoffAt: number | null; redCount: number;
+  scorePresent: number; scoreLate: number; scoreAbsent: number; scoreShare: number; scoreEvent: number;
 }
 export interface RankRow {
   memberId: string; name: string; className: string; score: number; rank: number; tieGroup: string;
