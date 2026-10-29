@@ -2,7 +2,7 @@ export interface Actor { id: string; studentId: string; name: string; className:
 export interface Cycle { id: string; name: string; status: 'active' | 'archived'; createdAt: number; archivedAt: number | null; redMode: 'automatic' | 'manual'; redScore: number | null; yellowScore: number | null; cutoffAt: number | null }
 export type AttendanceStatus = 'present' | 'late' | 'absent' | 'official_leave' | 'sick_leave' | 'personal_leave';
 export interface Attendance { memberId: string; name?: string; className?: string; status: AttendanceStatus; shared: boolean; note: string; checkedInAt: number | null }
-export interface ClubClass { id: string; cycleId: string; title: string; date: string; opensAt: number; lateAt: number; closesAt: number; status: 'draft' | 'open' | 'closed' | 'cancelled'; openedAt: number | null; closedAt: number | null; myAttendance: Attendance | null; attendance?: Attendance[] }
+export interface ClubClass { id: string; cycleId: string; title: string; date: string; opensAt: number; lateAt: number; closesAt: number; status: 'draft' | 'open' | 'closed' | 'cancelled'; openedAt: number | null; closedAt: number | null; checkinClosedAt: number | null; myAttendance: Attendance | null; attendance?: Attendance[] }
 export type EventKind = 'lecture' | 'visit' | 'spectating' | 'competition';
 export interface Participation { memberId: string; name?: string; className?: string; points: number; result: string; note: string; active: boolean }
 export interface ClubEvent { id: string; cycleId: string; title: string; kind: EventKind; description: string; location: string; startsAt: number; endsAt: number | null; points: number; status: 'published' | 'cancelled'; myParticipation: Participation | null; participants?: Participation[] }

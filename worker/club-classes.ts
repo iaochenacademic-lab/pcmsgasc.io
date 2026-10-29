@@ -5,7 +5,7 @@ import { attendanceView } from './club-views';
 
 interface ClubClass {
   id:string;cycleId:string;title:string;date:string;opensAt:number;lateAt:number;closesAt:number;
-  status:'draft'|'open'|'closed'|'cancelled';openedAt:number|null;closedAt:number|null;closeToken:string|null;
+  status:'draft'|'open'|'closed'|'cancelled';openedAt:number|null;closedAt:number|null;closeToken:string|null;checkinClosedAt:number|null;
 }
 function times(data:Row) {
   const date=string(data.date,'日期',10);
@@ -63,6 +63,7 @@ export async function checkin(request:Request,env:Env,actor:Actor) {
   const item=await getClass(env.DB,id), now=Date.now();
   writable(await cycle(env.DB,item.cycleId));
   if(item.status!=='open' || now<item.opensAt || now>=item.closesAt) fail('目前不在已開啟的簽到窗口內。',409);
+  if(item.checkinClosedAt!==null) fail('老師已結束本課簽到，請聯絡管理員補登。',409);
   // The code stays fixed for the class, so attempts never reset within it.
   const attempt=await q(env.DB,`INSERT INTO checkin_attempts(member_id,class_id,window,attempts) VALUES(?,?,0,1)
     ON CONFLICT(member_id,class_id) DO UPDATE SET attempts=checkin_attempts.attempts+1 RETURNING attempts`,
@@ -73,7 +74,7 @@ export async function checkin(request:Request,env:Env,actor:Actor) {
   const result=await transact(env.DB,[q(env.DB,`INSERT INTO attendance(class_id,member_id,status,shared,note,checked_in_at,updated_at,actor_id,reason)
     SELECT c.id,m.id,CASE WHEN ?>=c.late_at THEN 'late' ELSE 'present' END,0,'',?,?,m.id,'學生簽到'
     FROM classes c JOIN cycles cy ON cy.id=c.cycle_id JOIN members m ON m.id=?
-    WHERE c.id=? AND c.status='open' AND cy.status='active' AND ?>=c.opens_at AND ?<c.closes_at
+    WHERE c.id=? AND c.status='open' AND c.checkin_closed_at IS NULL AND cy.status='active' AND ?>=c.opens_at AND ?<c.closes_at
       AND m.role='member' AND m.active=1 AND m.must_change_password=0 AND m.joined_at<=? AND m.session_version=?
     ON CONFLICT(class_id,member_id) DO NOTHING`,now,now,now,actor.id,id,now,now,now,actor.sessionVersion),
     q(env.DB,`SELECT a.status,a.shared,a.note,a.checked_in_at FROM attendance a
@@ -95,7 +96,7 @@ export async function adminClasses(request:Request,env:Env,actor:Actor,path:stri
       q(db,`INSERT INTO classes(id,cycle_id,title,date,opens_at,late_at,closes_at) VALUES(?,?,?,?,?,?,?)`,id,config.id,title,when.date,when.opensAt,when.lateAt,when.closesAt)]);
     return json({class:await getClass(db,id)},201);
   }
-  const match=path.match(/^\/api\/admin\/classes\/([^/]+)(?:\/(code|attendance|close))?$/);
+  const match=path.match(/^\/api\/admin\/classes\/([^/]+)(?:\/(code|attendance|close|signin))?$/);
   if(!match) return null;
   const item=await getClass(db,match[1]),action=match[2];
   if(action==='code' && request.method==='GET') return json(await checkinCode(env.CHECKIN_SECRET,item));
@@ -123,6 +124,17 @@ export async function adminClasses(request:Request,env:Env,actor:Actor,path:stri
       condition:'EXISTS(SELECT 1 FROM club_audit WHERE id=?)',conditionValues:[changeId]}));
     const result=await transact(db,statements);
     if(result[0].meta.changes===0) fail('課次已被其他操作修改，請重新整理。',409);
+    return json({class:await getClass(db,item.id)});
+  }
+  if(action==='signin' && request.method==='PATCH') {
+    // Ends or reopens student check-in only; the class stays open for manual records and closing.
+    if(typeof data.open!=='boolean') fail('請指定開放或結束簽到。');
+    if(item.status!=='open') fail('只有已開啟的課次可以調整簽到。',409);
+    if(data.open && now>=item.closesAt) fail('簽到時間已過，無法重新開放。',409);
+    const result=await transact(db,[q(db,`UPDATE classes SET checkin_closed_at=? WHERE id=? AND status='open' AND checkin_closed_at IS ${data.open ? 'NOT NULL':'NULL'}`,
+      data.open ? null:now,item.id),
+      auditAfterChange(db,actor,item.cycleId,data.open ? 'class.checkin_resume':'class.checkin_stop',item.id,why,now,crypto.randomUUID())]);
+    if(result[0].meta.changes===0) fail(data.open ? '簽到目前已開放。':'簽到已經結束。',409);
     return json({class:await getClass(db,item.id)});
   }
   if(action==='attendance' && request.method==='PUT' && data.memberIds!==undefined) {

@@ -5,7 +5,7 @@
 ## 管理員日常流程
 
 1. 建立課次並確認日期、窗口與遲到時間；預設 12:45–13:10，12:55 起遲到，均為東八區。
-2. 上課時手動開啟簽到，投放每 30 秒更新的 QR／六位數碼。學生登入後確認提交。
+2. 上課時手動開啟簽到，投放「顯示簽到碼」的 6 位數字碼；同一節課整個簽到窗口內不變。學生登入後在「課堂簽到」輸入。人到齊可「提前結束簽到」，課次仍開啟以便補登；窗口內可重新開放。總覽與課次頁會提醒已過日期仍未開啟或未結課的課次。
 3. 核對出席、遲到、請假與分享；請假只由管理員登記。未開啟或取消的課次不扣缺席。
 4. 結課後發布積分與順位快照。更正必須填理由；出席＋分享為 2.5 分，遲到＋分享為 1 分。
 5. 發布活動詳情；參與與比賽成績由管理員登記，沒有站內報名。撤銷登記會同時修正積分。
@@ -30,7 +30,7 @@
 3. 先在本機依次通過 `npm test`、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check`。
 4. 確認目標後在測試資料庫執行 migration，部署測試 Worker，完成實際 Cookie、Session、角色及 100 人並發驗證，再安排正式部署。
 5. 使用 `wrangler secret put SESSION_SECRET` 及 `wrangler secret put CHECKIN_SECRET` 的私人輸入，各自使用安全隨機秘密；不得放入命令參數、wrangler.jsonc、前端或 Git。
-6. 使用 Wrangler 部署到 workers.dev，記錄版本 ID 與網址。正式上線前完成登入、改密、QR、匯出與手機驗收。
+6. 使用 Wrangler 部署到 workers.dev，記錄版本 ID 與網址。正式上線前完成登入、改密、數字碼簽到、匯出與手機驗收。
 
 目前設定不啟用包含請求細節的遠端日誌；保留操作審計但不記錄密碼或 Session。免費配額不足時應失敗並告知管理員，不自動購買服務。[Cloudflare 免費方案文件](https://developers.cloudflare.com/durable-objects/platform/pricing/) 說明 SQLite Durable Objects 的免費可用性及超额失敗行為。
 

@@ -26,6 +26,7 @@
 - `PUT /api/admin/classes/:id/attendance` `{memberId,status,shared?:boolean,note?:string,reason}` → `{attendance}`。status=`present|late|absent|official_leave|sick_leave|personal_leave`。每次完整替換該學生狀態，可更正已結課項目；修改已發布分數會產生新排行快照。
 - 批量：同一路徑改傳 `{memberIds:string[],status,note?:string,reason}` → `{updated}`。1–200 位、重複自動去除；任一成員不存在、非學生或加入晚於該課則整批拒絕。只改出勤狀態，不改已登記的分享；未傳 note 時保留原備註。已結課則同批重發分數與快照。每人各寫一筆審計。
 - `POST /api/admin/classes/:id/close` `{reason}` → `{class,snapshotId}`。僅已開啟可結课；自動補當時已加入且在籍學生缺席，發布分數及快照，重送不重複。
+- `PATCH /api/admin/classes/:id/signin` `{open:boolean,reason}` → `{class}`。只限已開啟課次。open:false 提前結束學生簽到（寫入 `checkin_closed_at`），課次仍開啟，可補登與結課；open:true 在原定截止前重新開放。狀態未變回傳 409。審計動作為 `class.checkin_stop`／`class.checkin_resume`。課次資料新增 `checkinClosedAt`（需 migration 0003）。
 
 ## 管理活動與分數
 

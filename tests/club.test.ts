@@ -3,7 +3,7 @@ import { handleBusiness } from '../worker/business';
 import type { Actor } from '../worker/env';
 import { clubDatabase } from './club-db';
 interface TestData {
-  class: {id:string};attendance:{status:string;shared:boolean};code:string;score:number;event:{id:string;points:number;myParticipation:{active:boolean}};
+  class: {id:string;checkinClosedAt:number|null};attendance:{status:string;shared:boolean};code:string;score:number;event:{id:string;points:number;myParticipation:{active:boolean}};
   classes:{myAttendance:{note:string;shared:boolean};attendance:{shared:boolean}[]}[];cycle:{id:string};members:{name:string}[];accountAudit:object[];
   events:{myParticipation:{active:boolean};participants:{active:boolean}[]}[];participation:{active:boolean};nextClass:{myAttendance:{shared:boolean}};
   rows:{memberId:string;score:number;rank:number;pending:boolean}[];snapshots:{id:string}[];hasScores:boolean;redScore:number|null;snapshotId:string;
@@ -373,6 +373,28 @@ describe('club rules through HTTP and actual SQLite', () => {
     expect((await call('/api/ledger','GET',undefined,c)).data.score).toBe(0);
     expect(fixture.sqlite.prepare("SELECT note FROM attendance WHERE class_id=? AND member_id='c'").get(id)!.note).toBe('');
     expect(fixture.sqlite.prepare("SELECT COUNT(*) n FROM club_audit WHERE action='class.attendance'").get()!.n).toBe(4);
+  });
+  it('ends student check-in early without closing the class and can reopen it', async () => {
+    const id = await createClass(); const current = await code(id); const path = `/api/admin/classes/${id}/signin`;
+    expect((await call(path,'PATCH',{open:false,reason:'人已到齊'})).data.class.checkinClosedAt).toBe(Date.now());
+    expect((await call('/api/checkin','POST',{classId:id,code:current},student)).status).toBe(409);
+    expect((await call(path,'PATCH',{open:false,reason:'重複送出'})).status).toBe(409);
+    expect((await call(`/api/admin/classes/${id}/attendance`,'PUT',{memberIds:['a'],status:'present',reason:'人工補登'})).status).toBe(200);
+    expect((await call(path,'PATCH',{open:true,reason:'有人遲來'})).data.class.checkinClosedAt).toBeNull();
+    const b = fixture.member('b');
+    expect((await call('/api/checkin','POST',{classId:id,code:current},b)).status).toBe(200);
+    expect((await close(id)).status).toBe(200);
+    expect(fixture.sqlite.prepare("SELECT COUNT(*) n FROM club_audit WHERE action IN ('class.checkin_stop','class.checkin_resume')").get()!.n).toBe(2);
+  });
+  it('only toggles check-in on an open class within its window', async () => {
+    const draft = await createClass(false);
+    expect((await call(`/api/admin/classes/${draft}/signin`,'PATCH',{open:false,reason:'提前結束'})).status).toBe(409);
+    const id = await createClass(); const path = `/api/admin/classes/${id}/signin`;
+    expect((await call(path,'PATCH',{reason:'缺少開關'})).status).toBe(400);
+    await call(path,'PATCH',{open:false,reason:'提前結束'});
+    at('13:10:00');
+    expect((await call(path,'PATCH',{open:true,reason:'重新開放'})).status).toBe(409);
+    expect((await call('/api/classes','GET',undefined,student)).data.classes[0]).toHaveProperty('checkinClosedAt');
   });
   it('rejects invalid bulk attendance without writing anything', async () => {
     const late = fixture.member('late',{joinedAt:Date.parse('2026-10-20T00:00:00+08:00')}); const id = await createClass();

@@ -73,7 +73,7 @@ export async function adminCycles(request:Request,env:Env,actor:Actor,path:strin
     // Deliberate allowlist: never SELECT * from members or any authentication table.
     const results=await db.batch([
       q(db,'SELECT id,student_id,name,class_name,role,active,joined_at FROM members'),
-      q(db,'SELECT id,cycle_id,title,date,opens_at,late_at,closes_at,status,opened_at,closed_at FROM classes WHERE cycle_id=?',config.id),
+      q(db,'SELECT id,cycle_id,title,date,opens_at,late_at,closes_at,status,opened_at,closed_at,checkin_closed_at FROM classes WHERE cycle_id=?',config.id),
       q(db,'SELECT a.* FROM attendance a JOIN classes c ON c.id=a.class_id WHERE c.cycle_id=?',config.id),
       q(db,'SELECT * FROM events WHERE cycle_id=?',config.id),
       q(db,'SELECT p.* FROM participation p JOIN events e ON e.id=p.event_id WHERE e.cycle_id=?',config.id),

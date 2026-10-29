@@ -32,6 +32,10 @@
 
 2026-10-29 第 3 批批量登記（未提交）：先新增 4 項 `tests/club.test.ts` 測試並確認失敗，實作後 club 測試 33/33。之後依序 `npm test`（7 檔 71/71，耗時約 115 秒；慢在既有的 100 人 cost-12 bcrypt 並發登入測試約 50 秒，本批未改認證程式，新測試各 4–8ms）、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check` 全部通過。內建瀏覽器實測：在虛構課次「批量登記測試（虛構）」勾選 3 人批量登記病假與備註成功，未登記人數由 99 變 96；在虛構比賽「批量參與測試（虛構）」以搜尋加全選一次登記 8 人各 3 分，再開名單時已登記者不再出現（測試同學003 為停用帳號，不在可選名單）。兩筆測試資料隨後取消，排行榜回到全員 0 分。
 
+第 1–3 批已提交於本機分支 `claude/design-review-batches-1-3`（3330913），尚未推送。
+
+2026-10-29 第 4 批課次管理（未提交）：新增 migration `0003_checkin_closed.sql`，已以 `wrangler d1 migrations apply club-db --local --persist-to .wrangler/acceptance` 套用到本機驗收資料庫；遠端尚未套用，部署前須先跑遠端 migration。先新增 2 項測試並確認失敗，實作後 club 測試 35/35。之後依序 `npm test`（7 檔 73/73）、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check` 全部通過。內建瀏覽器實測：管理員首頁與課次頁提醒「有 1 節課需要處理」（10-19 國際新聞研習已過期未開啟）；總表列出全部課次與已登記人數；虛構課次「提前結束簽到測試（虛構）」提前結束簽到後，學生簽到頁不再列出、強制送出回 409「老師已結束本課簽到」，重新開放後學生可見，審計各記一筆；該課次隨後取消。同時更正 OPERATIONS.md 中第 2 批遺留的 QR／30 秒說明。
+
 ## 尚未完成的正式上線
 
 - 尚未建立或部署本次重建的遠端 Cloudflare 資源。
