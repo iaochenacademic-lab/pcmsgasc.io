@@ -20,13 +20,24 @@
 
 詳細結果以 [重建進度](REBUILD_PROGRESS.md) 為準。已用虛構資料在本機 workerd / D1 / Account Durable Objects 完成245次 API 驗收，包括100人實際登入與簽到。
 
-獨立審查提出三項問題：結課與取消競態、封存快照漏掉交錯寫入分數、前端誤以即時分數阻止歷史截止結算。均已修正，審查者複核關閉；新增相應 SQLite 回歸。修正後65项測試及全套檢查通過，第一版已推送至 [GitHub PR #3](https://github.com/iaochenacademic-lab/pcmsgasc.io/pull/3)。遠端CI與合併狀態請見該PR；Code Review外掛連線失敗的限制已記錄於進度文件。
+獨立審查提出三項問題：結課與取消競態、封存快照漏掉交錯寫入分數、前端誤以即時分數阻止歷史截止結算。均已修正，審查者複核關閉；新增相應 SQLite 回歸。修正後65項測試及全套檢查通過，第一版 [GitHub PR #3](https://github.com/iaochenacademic-lab/pcmsgasc.io/pull/3) 已通過遠端 CI 並合併至 main（decb4a9）；Code Review 外掛連線失敗的限制已記錄於進度文件。
+
+2026-10-13 部署前再驗證：Windows 沙箱執行遇到 Vitest 暫存檔 ENOENT，55項通過、2個測試檔未載入；同一份程式在一般本機環境重跑65/65通過。隨後依序執行 typecheck、lint、build、worker:check 全部通過。已重新啟動本機 Worker 並在內建瀏覽器確認測試帳號首頁。
+
+2026-10-29 本機預覽：重新執行 `npm run build` 成功；以 `.claude/launch.json` 的 `worker-local`（`wrangler dev --local --persist-to .wrangler/acceptance`）啟動本機 Worker，內建瀏覽器以虛構 qa-admin 登入，確認總覽、成員管理、積分排行榜頁面正常顯示；主控台僅有登入前 Session 檢查的預期 401。本次未重跑 test、typecheck、lint、worker:check，亦未變更遠端資源。
+
+2026-10-29 設計與功能評估：使用者決定記錄於 [設計與功能評估](DESIGN_REVIEW.md)，分七批實作。第 1 批視覺改版（只動前端）已完成，尚未提交：依序執行 `npm test`（7 檔 65/65 通過）、`npm run typecheck` 通過、`npm run lint` 首次回報 1 項未使用變數，修正後通過，再重跑 typecheck 通過、`npm run build` 成功、`npm run worker:check` 成功。內建瀏覽器以虛構 qa-admin、qa-000 檢查桌面版總覽、課次、排行榜及手機版登入、首頁、簽到、排行榜；手機排行榜表格寬 341px 等於容器寬度，無橫向捲動。點名彈窗的必選狀態只經型別檢查，未在瀏覽器操作。評估時曾於本機 acceptance 資料建立並取消一筆虛構課次「簽到流程測試（虛構）」。
+
+2026-10-29 第 2 批簽到簡化（未提交）：先改寫 `tests/club.test.ts` 簽到測試，3 項新測試在舊實作下失敗；改 `worker/club-classes.ts` 後 club 測試 29/29 通過。之後依序 `npm test`（7 檔 67/67）、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check` 全部通過。內建瀏覽器實測：建立並開啟虛構課次「整堂數字碼測試（虛構）」，草稿時取碼回 409；管理員視窗只顯示 6 位數字；qa-003 在取碼 35 秒後輸入錯碼得到「簽到碼不正確」提示，輸入正確碼簽到成功（出席）；取消該課次後簽到頁顯示「目前沒有開放簽到的課堂」。手機寬度版面已檢查。`qrcode` 與 `@types/qrcode` 已移除，package.json 維持原格式。
+
+2026-10-29 第 3 批批量登記（未提交）：先新增 4 項 `tests/club.test.ts` 測試並確認失敗，實作後 club 測試 33/33。之後依序 `npm test`（7 檔 71/71，耗時約 115 秒；慢在既有的 100 人 cost-12 bcrypt 並發登入測試約 50 秒，本批未改認證程式，新測試各 4–8ms）、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check` 全部通過。內建瀏覽器實測：在虛構課次「批量登記測試（虛構）」勾選 3 人批量登記病假與備註成功，未登記人數由 99 變 96；在虛構比賽「批量參與測試（虛構）」以搜尋加全選一次登記 8 人各 3 分，再開名單時已登記者不再出現（測試同學003 為停用帳號，不在可選名單）。兩筆測試資料隨後取消，排行榜回到全員 0 分。
 
 ## 尚未完成的正式上線
 
 - 尚未建立或部署本次重建的遠端 Cloudflare 資源。
 - 尚未執行遠端遷移、雲端效能／Cookie驗收、正式成員匯入或私人帳號表交付。
-- 讀取 Cloudflare 帳戶的操作被自動審核拒絕，需取得明確的帳戶資料讀取及免費部署授權後才能繼續；未改走其他通道。
+- 使用者已明確授權讀取 Cloudflare 帳戶及免費部署；先前的授權阻礙已解除。
+- 已讀取唯一連接帳戶：Worker 與 D1 清單皆空，尚未建立 workers.dev 子網域。外掛讀取訂閱方案回報 Authentication error；本機 Wrangler 未登入，官方登入流程尚未完成。需完成登入及確認 Workers Free 後才進行遠端建立與部署。
 - 本次未讀取真實成員表；68名學生及1名管理員是先前文件的核對紀錄，並非本次匯入成果。
 
 本機測試通過不代表已正式上線。操作方式見 [管理、部署與回退](OPERATIONS.md)。

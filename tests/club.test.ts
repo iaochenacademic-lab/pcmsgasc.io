@@ -60,10 +60,23 @@ describe('club rules through HTTP and actual SQLite', () => {
     await close(id);
     expect((await call('/api/ledger', 'GET', undefined, student)).data.score).toBe(250);
   });
-  it('rejects expired, out-of-window, wrong-class and unopened check-in codes', async () => {
-    const id = await createClass(); const old = await code(id);
-    at('12:50:30');
-    expect((await call('/api/checkin','POST',{classId:id,code:old},student)).status).toBe(400);
+  it('keeps one six-digit code valid for the whole check-in window', async () => {
+    const id = await createClass(); const first = await code(id);
+    expect(first).toMatch(/^\d{6}$/);
+    at('13:05:00');
+    expect(await code(id)).toBe(first);
+    expect((await call('/api/checkin','POST',{classId:id,code:first},student)).data.attendance.status).toBe('late');
+  });
+  it('only reveals the code of an opened class and rejects non-numeric codes', async () => {
+    const draft = await createClass(false);
+    expect((await call(`/api/admin/classes/${draft}/code`)).status).toBe(409);
+    const id = await createClass();
+    expect((await call('/api/checkin','POST',{classId:id,code:'1.abcdef'},student)).status).toBe(400);
+  });
+  it('rejects wrong-code, out-of-window, wrong-class and unopened check-ins', async () => {
+    const id = await createClass(); const current = await code(id);
+    const wrong = current === '000000' ? '000001' : '000000';
+    expect((await call('/api/checkin','POST',{classId:id,code:wrong},student)).status).toBe(400);
     const other = await createClass(false);
     expect((await call('/api/checkin','POST',{classId:other,code:await code(id)},student)).status).toBe(409);
     at('13:10:00');
@@ -186,13 +199,14 @@ describe('club rules through HTTP and actual SQLite', () => {
     expect(exported.data.members[0]).toHaveProperty('name');
     expect(exported.data.accountAudit).toHaveLength(1);
   });
-  it('limits numeric code guessing and allows retry in the next rotation', async () => {
+  it('limits code guessing to ten attempts per member for the whole class', async () => {
     const id=await createClass(); const current=await code(id);
     const wrong=current==='000000' ? '000001':'000000';
     for(let attempt=0;attempt<10;attempt++) expect((await call('/api/checkin','POST',{classId:id,code:wrong},student)).status).toBe(400);
     expect((await call('/api/checkin','POST',{classId:id,code:current},student)).status).toBe(429);
-    at('12:50:30');
-    expect((await call('/api/checkin','POST',{classId:id,code:await code(id)},student)).status).toBe(200);
+    at('13:05:00');
+    expect((await call('/api/checkin','POST',{classId:id,code:current},student)).status).toBe(429);
+    expect((await call('/api/checkin','POST',{classId:id,code:current},fixture.member('b'))).status).toBe(200);
   });
   it('does not claim successful check-in when closing wins the race', async () => {
     const id=await createClass();const current=await code(id);
@@ -343,5 +357,55 @@ describe('club rules through HTTP and actual SQLite', () => {
     const exported=await call<{attendance:{shared:boolean}[];participation:{active:boolean}[]}>('/api/admin/export');
     expect(exported.data.attendance[0].shared).toBe(flag);
     expect(exported.data.participation[0].active).toBe(flag);
+  });
+  it('bulk-records attendance status, keeps existing sharing and republishes a closed class', async () => {
+    fixture.member('b'); const c = fixture.member('c'); const id = await createClass();
+    const path = `/api/admin/classes/${id}/attendance`;
+    await call(path,'PUT',{memberId:'a',status:'present',shared:true,reason:'完成分享'});
+    const bulk = await call<{updated:number}>(path,'PUT',{memberIds:['a','b','a'],status:'sick_leave',note:'集體病假',reason:'批量請假'});
+    expect(bulk).toEqual({status:200,data:{updated:2}});
+    const rows = fixture.sqlite.prepare('SELECT member_id,status,shared,note FROM attendance WHERE class_id=? ORDER BY member_id').all(id);
+    expect(rows).toEqual([{member_id:'a',status:'sick_leave',shared:1,note:'集體病假'},{member_id:'b',status:'sick_leave',shared:0,note:'集體病假'}]);
+    expect((await close(id)).status).toBe(200);
+    expect((await call('/api/ledger','GET',undefined,student)).data.score).toBe(200);
+    expect((await call('/api/ledger','GET',undefined,c)).data.score).toBe(-200);
+    expect((await call(path,'PUT',{memberIds:['c'],status:'official_leave',reason:'補登公假'})).status).toBe(200);
+    expect((await call('/api/ledger','GET',undefined,c)).data.score).toBe(0);
+    expect(fixture.sqlite.prepare("SELECT note FROM attendance WHERE class_id=? AND member_id='c'").get(id)!.note).toBe('');
+    expect(fixture.sqlite.prepare("SELECT COUNT(*) n FROM club_audit WHERE action='class.attendance'").get()!.n).toBe(4);
+  });
+  it('rejects invalid bulk attendance without writing anything', async () => {
+    const late = fixture.member('late',{joinedAt:Date.parse('2026-10-20T00:00:00+08:00')}); const id = await createClass();
+    const path = `/api/admin/classes/${id}/attendance`;
+    expect((await call(path,'PUT',{memberIds:[],status:'present',reason:'批量補登'})).status).toBe(400);
+    expect((await call(path,'PUT',{memberIds:['a','missing'],status:'present',reason:'批量補登'})).status).toBe(404);
+    expect((await call(path,'PUT',{memberIds:['a','admin'],status:'present',reason:'批量補登'})).status).toBe(404);
+    expect((await call(path,'PUT',{memberIds:['a',late.id],status:'present',reason:'批量補登'})).status).toBe(409);
+    expect((await call(path,'PUT',{memberIds:['a'],status:'unknown',reason:'批量補登'})).status).toBe(400);
+    expect(fixture.sqlite.prepare('SELECT COUNT(*) n FROM attendance').get()!.n).toBe(0);
+  });
+  it('bulk-registers event participation without overwriting existing entries', async () => {
+    fixture.member('b'); fixture.member('c');
+    const event = (await call('/api/admin/events','POST',{title:'模擬峰會',kind:'competition',startsAt:Date.now(),points:300})).data.event;
+    const path = `/api/admin/events/${event.id}/participants`;
+    await call(path,'PUT',{memberId:'a',active:true,points:500,result:'冠軍',reason:'登記成績'});
+    await call(path,'PUT',{memberId:'b',active:true,points:300,reason:'登記參與'});
+    await call(path,'PUT',{memberId:'b',active:false,points:300,reason:'誤登撤銷'});
+    const bulk = await call<{added:number}>(path,'PUT',{memberIds:['a','b','c'],points:200,reason:'批量登記'});
+    expect(bulk).toEqual({status:200,data:{added:2}});
+    const rows = fixture.sqlite.prepare('SELECT member_id,points,result,active FROM participation WHERE event_id=? ORDER BY member_id').all(event.id);
+    expect(rows).toEqual([{member_id:'a',points:500,result:'冠軍',active:1},{member_id:'b',points:200,result:'',active:1},{member_id:'c',points:200,result:'',active:1}]);
+    const scores = (await call('/api/rankings')).data.rows.map(row => [row.memberId,row.score]).sort();
+    expect(scores).toEqual([['a',500],['b',200],['c',200]]);
+    expect(fixture.sqlite.prepare("SELECT COUNT(*) n FROM club_audit WHERE action='event.participation'").get()!.n).toBe(5);
+    expect((await call(path,'PUT',{memberIds:['a'],points:200,reason:'重送'})).data).toEqual({added:0});
+  });
+  it('fixes non-competition bulk points and refuses cancelled events', async () => {
+    const event = (await call('/api/admin/events','POST',{title:'議題講座',kind:'lecture',startsAt:Date.now()})).data.event;
+    const path = `/api/admin/events/${event.id}/participants`;
+    expect((await call(path,'PUT',{memberIds:['a'],points:999,reason:'批量登記'})).data).toEqual({added:1});
+    expect((await call('/api/ledger','GET',undefined,student)).data.score).toBe(50);
+    await call(`/api/admin/events/${event.id}`,'PATCH',{status:'cancelled',reason:'活動取消'});
+    expect((await call(path,'PUT',{memberIds:['a'],reason:'批量登記'})).status).toBe(409);
   });
 });

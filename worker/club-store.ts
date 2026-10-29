@@ -42,6 +42,13 @@ export async function studentMember(db:Db,id:unknown) {
   const member=await one<{id:string;joinedAt:number}>(db,"SELECT id,joined_at FROM members WHERE id=? AND role='member'",memberId);
   if(!member) fail('找不到學生。',404); return member;
 }
+export async function studentMembers(db:Db,ids:unknown) {
+  if(!Array.isArray(ids) || ids.length===0 || ids.length>200) fail('請選擇 1 至 200 位學生。');
+  const unique=[...new Set(ids.map(id=>string(id,'成員編號',100)))];
+  const members=await all<{id:string;joinedAt:number}>(db,
+    "SELECT id,joined_at FROM members WHERE role='member' AND id IN (SELECT value FROM json_each(?))",JSON.stringify(unique));
+  if(members.length!==unique.length) fail('找不到學生。',404); return members;
+}
 export function audit(db:Db,actor:Actor,cycleId:string,action:string,targetId:string,why:string,now=Date.now()) {
   return q(db,'INSERT INTO club_audit(id,cycle_id,actor_id,action,target_id,reason,created_at) VALUES(?,?,?,?,?,?,?)',
     crypto.randomUUID(),cycleId,actor.id,action,targetId,why,now);

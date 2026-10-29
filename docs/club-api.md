@@ -13,7 +13,7 @@
 - `GET /api/classes` → `{classes:[{id,cycleId,title,date,opensAt,lateAt,closesAt,status,openedAt,closedAt,myAttendance}]}`。`myAttendance` 僅本人 `{status,shared,note,checkedInAt}`；管理員另外讀取出勤明細。
 - `GET /api/events` → `{events:[{id,cycleId,title,kind,description,location,startsAt,endsAt,points,status,myParticipation}]}`，kind=`lecture|visit|spectating|competition`，status=`published|cancelled`。非比賽固定 50 分。
 - `GET /api/events/:id` → `{event}`；myParticipation 僅本人 `{points,result,note,active}`。
-- `POST /api/checkin` `{classId,code}` → `{attendance,alreadyCheckedIn}`。code 可為當期 6 位數字或 QR token。只有已開啟且窗口內有效，12:55（可修改）起遲到。重複簽到不覆寫既有狀態。每位學生每課每30秒最多10次提交，超出回傳429；下一輪可重試。
+- `POST /api/checkin` `{classId,code}` → `{attendance,alreadyCheckedIn}`。code 必須為 6 位數字；每課一組，開啟簽到後整個窗口內有效。只有已開啟且窗口內可簽到，12:55（可修改）起遲到。重複簽到不覆寫既有狀態。每位學生每課最多 10 次提交（含成功），不隨時間重置，超出回傳 429，需由管理員補登。
 - `GET /api/ledger` → `{ledger:[{id,cycleId,memberId,sourceType,sourceId,delta,reason,createdAt}],score}`。學生只取得本人，管理員可加 `memberId` 查指定學生。
 - `GET /api/rankings` → `{cycle,rows:[{memberId,name,className,score,rank,tieGroup,pending,qualified}],redScore,yellowScore,hasScores,overlap,snapshots:[{id,kind,classId,createdAt,cutoffAt}]}`。無計分不提示待定；同分同名次。`?snapshotId=...` 讀固定快照，固定快照不隨停用改變。公開欄位不含學號、請假、備註。
 
@@ -22,8 +22,9 @@
 - `GET /api/admin/classes` 同 classes，另每課帶 `attendance:[{memberId,name,className,status,shared,note,checkedInAt}]`。
 - `POST /api/admin/classes` `{title,date,openTime?:'12:45',lateTime?:'12:55',closeTime?:'13:10'}` → `{class}`，初始 draft。
 - `PATCH /api/admin/classes/:id` `{title?,date?,openTime?,lateTime?,closeTime?,status?:'open'|'cancelled',reason}` → `{class}`。時間只能在草稿改；取消可撤回已發布分數並留下紀錄。
-- `GET /api/admin/classes/:id/code` → `{code,token,expiresAt,classId}`。前端 QR URL 以 `location.origin + '/checkin?classId=' + classId + '&code=' + token` 生成；30 秒換碼，不在 URL 帶登入憑證。
+- `GET /api/admin/classes/:id/code` → `{code,classId,opensAt,lateAt,closesAt}`。僅已開啟課次可取得，否則 409。code 由 CHECKIN_SECRET 對課次編號與開啟時間做 HMAC 導出，同一次開啟內不變；不提供 QR。
 - `PUT /api/admin/classes/:id/attendance` `{memberId,status,shared?:boolean,note?:string,reason}` → `{attendance}`。status=`present|late|absent|official_leave|sick_leave|personal_leave`。每次完整替換該學生狀態，可更正已結課項目；修改已發布分數會產生新排行快照。
+- 批量：同一路徑改傳 `{memberIds:string[],status,note?:string,reason}` → `{updated}`。1–200 位、重複自動去除；任一成員不存在、非學生或加入晚於該課則整批拒絕。只改出勤狀態，不改已登記的分享；未傳 note 時保留原備註。已結課則同批重發分數與快照。每人各寫一筆審計。
 - `POST /api/admin/classes/:id/close` `{reason}` → `{class,snapshotId}`。僅已開啟可結课；自動補當時已加入且在籍學生缺席，發布分數及快照，重送不重複。
 
 ## 管理活動與分數
@@ -32,6 +33,7 @@
 - `POST /api/admin/events` `{title,kind,description?,location?,startsAt,endsAt?,points?}` → `{event}`。
 - `PATCH /api/admin/events/:id` `{title?,description?,location?,startsAt?,endsAt?,status?:'cancelled',reason}` → `{event}`。取消撤回所有參與分數。
 - `PUT /api/admin/events/:id/participants` `{memberId,active:boolean,points?:number,result?:string,note?:string,reason}` → `{participation}`。非比賽固定50，比賽可逐人自定；active=false撤回且保留歷史。
+- 批量：同一路徑改傳 `{memberIds:string[],points?:number,reason}` → `{added}`。只新增未登記或已撤銷的成員，已登記者的分數、成績與備註不變，也不寫審計；比賽用統一 points，其他類別固定 0.5 分。活動已取消回傳 409。
 - `POST /api/admin/adjustments` `{memberId,points,reason,idempotencyKey}` → `{ok:true}`。points為有正負的整數分，idempotencyKey 使用 `crypto.randomUUID()`，網路重送沿用同一值。
 
 ## 設定、結算、封存與審計

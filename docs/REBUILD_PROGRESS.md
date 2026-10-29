@@ -6,6 +6,7 @@
 
 - 使用者確認需求與目前安裝版本授權，指定 Local Codex 建立全新設計。
 - 使用者授權第一版完成後執行 Code Review、提交推送 GitHub，並移除 Git 歷史已保留的舊版內容。
+- 2026-10-13 使用者明確授權讀取 Cloudflare 帳戶並以免費方案部署，且要求完成後在內建瀏覽器打開網站。
 - 重建分支：codex/rebuild-club；舊版基準：24a9095。保留 AGPL 與原有致謝。
 
 ## 已完成的第一版
@@ -39,11 +40,22 @@
 
 ## GitHub 交付
 
-第一版已推送到 GitHub，透過 [PR #3](https://github.com/iaochenacademic-lab/pcmsgasc.io/pull/3) 交付主分支。該PR的Checks與合併狀態為遠端即時依據。`90919b1` 為完整實作提交。`Code Review` 外掛兩次回報無法連接GitHub，未取得其檢查結果；程式碼由獨立審查者審查與複核，遠端CI改由已連接的GitHub外掛直接讀取。
+第一版已推送到 GitHub，透過 [PR #3](https://github.com/iaochenacademic-lab/pcmsgasc.io/pull/3) 合併主分支，合併提交 `decb4a9`。最終 PR CI run `38275806490` 全部成功。`90919b1` 為完整實作提交。`Code Review` 外掛兩次回報無法連接GitHub，未取得其檢查結果；程式碼由獨立審查者審查與複核，遠端CI改由已連接的GitHub外掛直接讀取。
+
+## 2026-10-13 部署準備與預覽
+
+- 使用者的明確帳戶資料讀取及免費部署授權已收到，已透過原 Cloudflare connector 成功讀取帳戶，沒有改道繞過先前審核。
+- 唯一連接帳戶的 Worker、D1 清單為空；workers.dev 子網域尚未建立。未建立或變更任何遠端資源。
+- 帳戶及使用者訂閱查詢皆回報 Authentication error；Worker account-settings 可讀，但 default_usage_model=standard 不能證明 Workers Free。未宣稱已確認免費方案。
+- Wrangler 4.149.0 回報尚未登入。已啟動官方 OAuth 流程並請使用者完成登入與確認免費方案；該次流程逾時，後續繼續時須重新啟動登入，不能重用過期連結。
+- 部署前 npm test 在 Windows 沙箱出現 Vitest 暫存檔 ENOENT：55項通過、2個測試檔未載入。同一份程式在一般本機環境重跑65/65通過（30.12秒），未為此改動應用程式。
+- 其後依次執行 npm run typecheck、npm run lint、npm run build、npm run worker:check，全部成功。
+- 已重新啟動本機 workerd / D1 / Account DO；內建瀏覽器打開 http://127.0.0.1:8787/#dashboard 並確認虛構測試帳號首頁。這是本機預覽，不是正式上線網址。
+- 已在 Git 忽略的 artifacts/local/prepare-staging.mjs 準備獨立雲端驗收工具，限制 staging workers.dev 目標並使用逐人隨機密碼；僅做語法檢查，尚未生成或上傳測試帳號、尚未執行雲端驗收。
 
 ## 正式上線仍待完成
 
-- Cloudflare connector讀取 /accounts 被自動審核拒絕：未辨識到明確帳戶資料讀取授權。未以其他通道繞過；免費部署前需取得最後授權。
+- Cloudflare 部署授權已具備；目前等待官方登入及 Workers Free 方案核對，詳見上節。
 - 尚未建立本次重建遠端資源、執行遠端遷移、部署、實際雲端並發／Cookie驗收。
 - 原成員表本次未讀取。先前文件的68學生+1admin為過去核對紀錄；沒有產生或上傳真實帳號資料，沒有私人帳號交付。
 - 不自動升級付費。管理與回退方式見 [OPERATIONS.md](OPERATIONS.md)。
