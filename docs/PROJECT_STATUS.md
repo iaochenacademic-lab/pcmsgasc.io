@@ -42,6 +42,10 @@
 
 2026-10-29 第 7 批 CSV 匯出（未提交）：先新增 1 項測試並確認失敗（另修正測試以保留 BOM 解碼：`Response.text()` 會去除 BOM），實作後 club 測試 43/43。之後依序 `npm test`（7 檔 81/81）、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check` 全部通過。內建瀏覽器以管理員身份在頁面內請求三種 CSV：皆 200、`text/csv; charset=utf-8`、開頭為 UTF-8 BOM，分別 99、6、16 筆資料列；頁面顯示三個下載按鈕與 JSON 備份。未在內建瀏覽器實際點擊下載以免在使用者電腦存檔，也未用 Excel 實際開啟。設計評估七批至此全部完成，第 5–7 批尚未提交。
 
+七批已提交並推送為 [PR #4](https://github.com/iaochenacademic-lab/pcmsgasc.io/pull/4)（分支 `claude/design-review-7-batches`）。
+
+2026-11-13 學會標誌（未提交）：以使用者放在倉庫根目錄的 `logo.jpg`（1080×1080，原檔未改動、未提交）裁成圓形透明背景，輸出 `web/public/brand/logo-64.png`、`logo-128.png`、`favicon-32.png`、`apple-touch-icon.png`。新增 `Logo` 元件取代原地球線條圖示，用於桌面側欄左上角、手機頂欄、登入卡片與載入畫面，並在 index.html 加入網站圖示。內建瀏覽器確認：登入頁、手機頂欄、桌面側欄皆正常顯示並載入 128px 圖檔，/brand 與 favicon 回應 200 image/png。依序 `npm test`（7 檔 81/81）、`npm run typecheck`、`npm run lint`、`npm run build`、`npm run worker:check` 全部通過。
+
 ## 尚未完成的正式上線
 
 - 尚未建立或部署本次重建的遠端 Cloudflare 資源。

@@ -7,7 +7,8 @@ export const ToastContext = createContext<(message: string) => void>(() => {});
 const openModals: symbol[] = [];
 let beforeModalOverflow = '';
 export const useToast = () => useContext(ToastContext);
-export function Globe() { return <svg viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="28" r="22"/><ellipse cx="28" cy="28" rx="10" ry="22"/><path d="M8 20h40M6 28h44M8 36h40M28 6v44"/></svg>; }
+// Club emblem. Decorative (empty alt) because the club name is always printed beside it or on the page.
+export function Logo({ size }: { size: number }) { return <img className="logo" src="/brand/logo-128.png" srcSet="/brand/logo-64.png 64w, /brand/logo-128.png 128w" sizes={`${size}px`} width={size} height={size} alt=""/>; }
 export function PageHead({ title, description, children }: { title: string; description?: string; children?: ReactNode }) { return <header className="page-head"><div><h1>{title}</h1>{description && <p>{description}</p>}</div>{children && <div className="page-actions">{children}</div>}</header>; }
 export function Tag({ children, kind = 'outline' }: { children: ReactNode; kind?: 'outline' | 'success' | 'warning' | 'danger' }) { return <span className={`tag tag-${kind}`}>{children}</span>; }
 export function Notice({ children, kind = '', title }: { children: ReactNode; kind?: string; title?: string }) { return <div className={`notice ${kind ? `notice-${kind}` : ''}`} role={kind === 'error' ? 'alert' : undefined}>{title && <strong>{title}</strong>}{children}</div>; }

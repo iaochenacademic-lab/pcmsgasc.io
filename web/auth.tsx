@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { api } from './api';
-import { Field, Form, Globe, Notice, PageHead, useToast } from './ui';
+import { Field, Form, Logo, Notice, PageHead, useToast } from './ui';
 import type { Actor } from './types';
 
 function PasswordInput({ name, autoComplete, minLength }: { name: string; autoComplete: string; minLength?: number }) {
@@ -9,7 +9,7 @@ function PasswordInput({ name, autoComplete, minLength }: { name: string; autoCo
   return <span className="password-input"><input className="input" name={name} type={visible ? 'text' : 'password'} autoComplete={autoComplete} minLength={minLength} required/><button type="button" className="password-toggle" aria-label={visible ? '隱藏密碼' : '顯示密碼'} onClick={() => setVisible(!visible)}>{visible ? <EyeOff size={18}/> : <Eye size={18}/>}</button></span>;
 }
 export function Login({ onUser }: { onUser: (user: Actor) => void }) {
-  return <main className="auth-page"><section className="auth-panel"><div className="auth-panel-inner"><div className="auth-brand"><span className="brand-mark"><Globe/></span><span>國際議題研習學會</span></div><h2>登入</h2><p className="muted">使用老師提供的學號與密碼登入。</p><Form submit="登入學會" onSubmit={async data => { const result = await api<{ user: Actor }>('/api/auth/login', 'POST', { studentId: String(data.get('studentId')).trim(), password: String(data.get('password')) }); onUser(result.user); }}><Field label="學號／管理帳號"><input className="input" name="studentId" autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={64} required placeholder="請輸入學號"/></Field><Field label="密碼"><PasswordInput name="password" autoComplete="current-password"/></Field></Form><div className="auth-help"><ShieldCheck size={20}/><p>帳號由老師建立及分發。<br/>忘記密碼或無法登入，請聯絡指導老師協助。</p></div></div></section></main>;
+  return <main className="auth-page"><section className="auth-panel"><div className="auth-panel-inner"><div className="auth-brand"><Logo size={48}/><span>國際議題研習學會</span></div><h2>登入</h2><p className="muted">使用老師提供的學號與密碼登入。</p><Form submit="登入學會" onSubmit={async data => { const result = await api<{ user: Actor }>('/api/auth/login', 'POST', { studentId: String(data.get('studentId')).trim(), password: String(data.get('password')) }); onUser(result.user); }}><Field label="學號／管理帳號"><input className="input" name="studentId" autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={64} required placeholder="請輸入學號"/></Field><Field label="密碼"><PasswordInput name="password" autoComplete="current-password"/></Field></Form><div className="auth-help"><ShieldCheck size={20}/><p>帳號由老師建立及分發。<br/>忘記密碼或無法登入，請聯絡指導老師協助。</p></div></div></section></main>;
 }
 export function PasswordForm({ user, onUser }: { user: Actor; onUser: (user: Actor) => void }) {
   const toast = useToast(); const [version, setVersion] = useState(0);
